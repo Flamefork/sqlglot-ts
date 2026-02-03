@@ -1,0 +1,82 @@
+{
+  "name": "sqlglot-ts",
+  "version": "0.1.0",
+  "description": "SQL parser and transpiler for TypeScript - port of SQLGlot",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./dialects": {
+      "import": "./dist/dialects/index.js",
+      "types": "./dist/dialects/index.d.ts"
+    },
+    "./dialects/*": {
+      "import": "./dist/dialects/*.js",
+      "types": "./dist/dialects/*.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc && esbuild src/index.ts --bundle --format=esm --outfile=dist/bundle.esm.js --sourcemap && esbuild src/index.ts --bundle --format=iife --global-name=sqlglotTs --outfile=dist/bundle.global.js --sourcemap",
+    "build:types": "tsc --emitDeclarationOnly",
+    "test": "uv run --directory tools pytest ../sqlglot/tests/dialects/ -v --tb=short -c pyproject.toml -p conftest --import-mode=importlib -k 'not test_lazy_load'",
+    "test:duck": "npm test -- -k TestDuckDB",
+    "test:quick": "npm test -- -k TestDuckDB --lf -x",
+    "test:last": "npm test -- --lf",
+    "test:failed": "npm test -- --lf -x",
+    "test:bigquery": "npm test -- -k TestBigQuery",
+    "test:presto": "npm test -- -k TestPresto",
+    "test:spark": "npm test -- -k TestSpark",
+    "generate": "uv run --directory tools generate.py",
+    "generate:check": "npm run generate && git diff --exit-code src/expressions.generated.ts",
+    "test:parity-core": "npm test -- -k 'TestDuckDB or TestBigQuery or TestPresto or TestSpark' --tb=short",
+    "size": "esbuild src/index.ts --bundle --minify --outfile=/dev/null --analyze",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "format": "biome format --write src",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm run typecheck"
+  },
+  "keywords": [
+    "sql",
+    "parser",
+    "transpiler",
+    "ast",
+    "postgres",
+    "mysql",
+    "bigquery",
+    "snowflake",
+    "duckdb"
+  ],
+  "author": "Ilia Ablamonov",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Flamefork/sqlglot-ts.git"
+  },
+  "homepage": "https://github.com/Flamefork/sqlglot-ts#readme",
+  "bugs": {
+    "url": "https://github.com/Flamefork/sqlglot-ts/issues"
+  },
+  "sideEffects": [
+    "./src/index.ts",
+    "./src/dialects/*.ts",
+    "./dist/index.js",
+    "./dist/dialects/*.js"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@types/node": "^20.10.0",
+    "esbuild": "^0.19.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,101 @@
+/**
+ * Re-export all dialects for tree-shakeable imports
+ */
+
+export { PostgresDialect } from "./postgres.js"
+export { MySQLDialect } from "./mysql.js"
+export { BigQueryDialect } from "./bigquery.js"
+export { SnowflakeDialect } from "./snowflake.js"
+export { DuckDBDialect } from "./duckdb.js"
+export { PrestoDialect } from "./presto.js"
+export { TrinoDialect } from "./trino.js"
+export { SparkDialect, Spark2Dialect } from "./spark.js"
+export { HiveDialect } from "./hive.js"
+export { ClickHouseDialect } from "./clickhouse.js"
+export { TSQLDialect } from "./tsql.js"
+export { DatabricksDialect } from "./databricks.js"
+export { RedshiftDialect } from "./redshift.js"
+export { OracleDialect } from "./oracle.js"
+export { StarRocksDialect } from "./starrocks.js"
+export { SQLiteDialect } from "./sqlite.js"
+export { DorisDialect } from "./doris.js"
+export { DrillDialect } from "./drill.js"
+export { TeradataDialect } from "./teradata.js"
+export { SingleStoreDialect } from "./singlestore.js"
+export { DremioDialect } from "./dremio.js"
+export { FabricDialect } from "./fabric.js"
+export { AthenaDialect } from "./athena.js"
+export { ExasolDialect } from "./exasol.js"
+export { RisingWaveDialect } from "./risingwave.js"
+export { MaterializeDialect } from "./materialize.js"
+export { TableauDialect } from "./tableau.js"
+export { DruidDialect } from "./druid.js"
+export { DuneDialect } from "./dune.js"
+export { SolrDialect } from "./solr.js"
+export { PRQLDialect } from "./prql.js"
+
+// Also export as named objects for convenience
+import { AthenaDialect } from "./athena.js"
+import { BigQueryDialect } from "./bigquery.js"
+import { ClickHouseDialect } from "./clickhouse.js"
+import { DatabricksDialect } from "./databricks.js"
+import { DorisDialect } from "./doris.js"
+import { DremioDialect } from "./dremio.js"
+import { DrillDialect } from "./drill.js"
+import { DruidDialect } from "./druid.js"
+import { DuckDBDialect } from "./duckdb.js"
+import { DuneDialect } from "./dune.js"
+import { ExasolDialect } from "./exasol.js"
+import { FabricDialect } from "./fabric.js"
+import { HiveDialect } from "./hive.js"
+import { MaterializeDialect } from "./materialize.js"
+import { MySQLDialect } from "./mysql.js"
+import { OracleDialect } from "./oracle.js"
+import { PostgresDialect } from "./postgres.js"
+import { PrestoDialect } from "./presto.js"
+import { PRQLDialect } from "./prql.js"
+import { RedshiftDialect } from "./redshift.js"
+import { RisingWaveDialect } from "./risingwave.js"
+import { SingleStoreDialect } from "./singlestore.js"
+import { SnowflakeDialect } from "./snowflake.js"
+import { SolrDialect } from "./solr.js"
+import { Spark2Dialect, SparkDialect } from "./spark.js"
+import { SQLiteDialect } from "./sqlite.js"
+import { StarRocksDialect } from "./starrocks.js"
+import { TableauDialect } from "./tableau.js"
+import { TeradataDialect } from "./teradata.js"
+import { TrinoDialect } from "./trino.js"
+import { TSQLDialect } from "./tsql.js"
+
+export const Athena = new AthenaDialect()
+export const BigQuery = new BigQueryDialect()
+export const ClickHouse = new ClickHouseDialect()
+export const Databricks = new DatabricksDialect()
+export const Doris = new DorisDialect()
+export const Dremio = new DremioDialect()
+export const Drill = new DrillDialect()
+export const Druid = new DruidDialect()
+export const DuckDB = new DuckDBDialect()
+export const Dune = new DuneDialect()
+export const Exasol = new ExasolDialect()
+export const Fabric = new FabricDialect()
+export const Hive = new HiveDialect()
+export const Materialize = new MaterializeDialect()
+export const MySQL = new MySQLDialect()
+export const Oracle = new OracleDialect()
+export const Postgres = new PostgresDialect()
+export const Presto = new PrestoDialect()
+export const PRQL = new PRQLDialect()
+export const Redshift = new RedshiftDialect()
+export const RisingWave = new RisingWaveDialect()
+export const SingleStore = new SingleStoreDialect()
+export const Snowflake = new SnowflakeDialect()
+export const Solr = new SolrDialect()
+export const Spark = new SparkDialect()
+export const Spark2 = new Spark2Dialect()
+export const SQLite = new SQLiteDialect()
+export const StarRocks = new StarRocksDialect()
+export const Tableau = new TableauDialect()
+export const Teradata = new TeradataDialect()
+export const Trino = new TrinoDialect()
+export const TSQL = new TSQLDialect()
