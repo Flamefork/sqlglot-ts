@@ -1,8 +1,10 @@
 # sqlglot-ts
 
-TypeScript port of [SQLGlot](https://github.com/tobymao/sqlglot) - a SQL parser, transpiler, optimizer, and engine.
+TypeScript port of [SQLGlot](https://github.com/tobymao/sqlglot) — a SQL parser and transpiler.
 
-**Note:** This is a browser-first implementation focusing on parsing and transpilation. The optimizer and executor modules are not included.
+**Browser-first implementation** focusing on parsing and transpilation. Zero runtime dependencies.
+
+> **Early release.** DuckDB dialect is fully tested against Python SQLGlot's test suite (500+ test cases). Other dialects are included and functional but have varying levels of coverage — expect gaps in edge cases. Contributions and bug reports welcome.
 
 ## Installation
 
@@ -24,33 +26,34 @@ const statements = parse('SELECT 1; SELECT 2');
 const ast = parseOne('SELECT * FROM users WHERE id = 1');
 ```
 
-### Transpile SQL
+### Transpile between dialects
 
 ```typescript
-import { transpile, transpileOne } from 'sqlglot-ts';
+import { transpileOne } from 'sqlglot-ts';
+import 'sqlglot-ts/dialects/duckdb';
+import 'sqlglot-ts/dialects/postgres';
 
-// Transpile from PostgreSQL to BigQuery
 const sql = transpileOne(
-  'SELECT CAST(x AS INT)',
-  { read: 'postgres', write: 'bigquery' }
+  'SELECT TRY_CAST(x AS INT)',
+  { read: 'duckdb', write: 'postgres' }
 );
-// => 'SELECT SAFE_CAST(x AS INT)'
+// => 'SELECT CAST(x AS INT)'
 ```
 
-### Use Dialect Objects
+### Use dialect objects
 
 ```typescript
 import { parseOne } from 'sqlglot-ts';
-import { Postgres, MySQL, BigQuery, Snowflake, DuckDB } from 'sqlglot-ts/dialects';
+import { Postgres, BigQuery, DuckDB } from 'sqlglot-ts/dialects';
 
 const ast = parseOne('SELECT TRY_CAST(x AS INT)');
 
-console.log(BigQuery.generate(ast));   // SELECT SAFE_CAST(x AS INT)
-console.log(Snowflake.generate(ast));  // SELECT TRY_CAST(x AS INT)
-console.log(DuckDB.generate(ast));     // SELECT TRY_CAST(x AS INT)
+console.log(BigQuery.generate(ast));
+console.log(Postgres.generate(ast));
+console.log(DuckDB.generate(ast));
 ```
 
-### Work with AST
+### Work with the AST
 
 ```typescript
 import { parseOne } from 'sqlglot-ts';
@@ -71,83 +74,77 @@ columns.forEach(col => console.log(col.name));
 console.log(ast.sql());
 ```
 
+## Dialect imports
+
+The core `sqlglot-ts` entry point does **not** load any dialect — only standard SQL parsing works out of the box. Import the dialects you need:
+
+```typescript
+// Only what you need (recommended)
+import 'sqlglot-ts/dialects/duckdb';
+import 'sqlglot-ts/dialects/postgres';
+
+// Or all dialects at once
+import 'sqlglot-ts/dialects';
+```
+
+Each dialect file registers itself on import via `Dialect.register()`.
+
 ## Supported Dialects
 
-- PostgreSQL (`postgres`)
-- MySQL (`mysql`)
-- BigQuery (`bigquery`)
-- Snowflake (`snowflake`)
-- DuckDB (`duckdb`)
+**Fully tested:** DuckDB
+
+**Included (partial coverage):** Athena, BigQuery, ClickHouse, Databricks, Doris, Dremio, Drill, Druid, Dune, Exasol, Fabric, Hive, Materialize, MySQL, Oracle, PostgreSQL, Presto, PRQL, Redshift, RisingWave, SingleStore, Snowflake, Solr, Spark, SQLite, StarRocks, Tableau, Teradata, Trino, T-SQL.
 
 ## API Reference
 
 ### Functions
 
-- `parse(sql, options?)` - Parse SQL into AST array
-- `parseOne(sql, options?)` - Parse a single SQL statement
-- `transpile(sql, options?)` - Transpile SQL between dialects (returns array)
-- `transpileOne(sql, options?)` - Transpile a single SQL statement
+- `parse(sql, options?)` — Parse SQL into AST array
+- `parseOne(sql, options?)` — Parse a single SQL statement
+- `transpile(sql, options?)` — Transpile SQL between dialects (returns array)
+- `transpileOne(sql, options?)` — Transpile a single SQL statement
 
 ### Classes
 
-- `Dialect` - Base dialect class with registry
-- `Parser` - SQL parser
-- `Generator` - SQL generator
-- `Tokenizer` - SQL tokenizer
-- `Expression` - Base AST node class
+- `Dialect` — Base dialect class with registry
+- `Parser` — SQL parser
+- `Generator` — SQL generator
+- `Tokenizer` — SQL tokenizer
+- `Expression` — Base AST node class
+
+## Bundle Size
+
+The library uses unbundled ESM — each dialect is a separate file. Core parsing (`sqlglot-ts`) without any dialects is the smallest import. Adding dialects increases the total proportionally.
+
+Typical sizes (gzipped):
+- Core only: ~80KB
+- Core + one dialect: ~100–120KB
+- All dialects: ~150KB
 
 ## Development
 
 ```bash
-# Install dependencies
-npm install
-
-# Build
-npm run build
-
-# Run tests
-npm test
-
-# Run Pyodide bridge tests
-npm run test:bridge
-
-# Type check
-npm run typecheck
-```
-
-## Bundle Size
-
-The library is designed to be tree-shakeable. Importing only what you need keeps bundle size small:
-
-```typescript
-// Full import (~85KB gzipped)
-import * as sqlglot from 'sqlglot-ts';
-
-// Selective import (smaller)
-import { parseOne, transpileOne } from 'sqlglot-ts';
-
-// Single dialect (smallest)
-import { Postgres } from 'sqlglot-ts/dialects';
+npm install        # Install dependencies
+npm run build      # Build
+npm test           # format:check + lint + typecheck + pytest DuckDB
+npm run pytest     # Full pytest run (all dialects)
+npm run fix        # Format + lint fix
+npm run generate   # Generate TS expressions from Python SQLGlot
 ```
 
 ## Differences from Python SQLGlot
 
-This TypeScript port focuses on core parsing and generation functionality:
-
 **Included:**
-- Tokenizer
-- Parser
-- Generator
-- 5 dialects (PostgreSQL, MySQL, BigQuery, Snowflake, DuckDB)
+- Tokenizer, Parser, Generator
+- All 31 dialects
 - Expression AST classes
-- Basic dialect transpilation
+- Cross-dialect transpilation
 
 **Not included:**
 - Optimizer (qualify, annotate_types, simplify, etc.)
-- Executor (runs SQL on dataframes)
+- Executor
 - Lineage analysis
 - Schema module
-- 29 additional dialects
 
 ## License
 

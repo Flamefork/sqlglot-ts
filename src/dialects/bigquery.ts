@@ -10,7 +10,7 @@ import {
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
-import { Parser } from "../parser.js"
+import { FunctionBuilder, Parser } from "../parser.js"
 import { formatTime } from "../time.js"
 import { TokenType, Tokenizer } from "../tokens.js"
 import {
@@ -111,7 +111,7 @@ export class BigQueryParser extends Parser {
     ["TIMESTAMP", "TIMESTAMPTZ"],
   ])
 
-  static override FUNCTIONS = new Map([
+  static override FUNCTIONS: Map<string, FunctionBuilder> = new Map([
     ...Parser.FUNCTIONS,
     [
       "DATE",
@@ -307,12 +307,50 @@ export class BigQueryGenerator extends Generator {
   static override BYTE_END: string | null = "'"
   static override BYTE_STRING_IS_BYTES_TYPE = true
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    buildUnescapedSequences(),
-  )
-  static override STRING_ESCAPES = ["\\"]
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(buildUnescapedSequences())
+  static override STRING_ESCAPES: string[] = ["\\"]
 
-  static override FEATURES = {
+  static override FEATURES: {
+    NULL_ORDERING_SUPPORTED: boolean
+    INTERVAL_ALLOWS_PLURAL_FORM: boolean
+    RENAME_TABLE_WITH_DB: boolean
+    UNNEST_WITH_ORDINALITY: boolean
+    LOCKING_READS_SUPPORTED: boolean
+    LIMIT_FETCH: "ALL" | "LIMIT" | "FETCH"
+    LIMIT_IS_TOP: boolean
+    EXTRACT_ALLOWS_QUOTES: boolean
+    IGNORE_NULLS_IN_FUNC: boolean
+    NVL2_SUPPORTED: boolean
+    SUPPORTS_SINGLE_ARG_CONCAT: boolean
+    LAST_DAY_SUPPORTS_DATE_PART: boolean
+    COLLATE_IS_FUNC: boolean
+    EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE: boolean
+    WRAP_DERIVED_VALUES: boolean
+    VALUES_AS_TABLE: boolean
+    SINGLE_STRING_INTERVAL: boolean
+    ALTER_TABLE_INCLUDE_COLUMN_KEYWORD: boolean
+    ALTER_TABLE_ADD_REQUIRED_FOR_EACH_COLUMN: boolean
+    ALTER_TABLE_SUPPORTS_CASCADE: boolean
+    SUPPORTS_TABLE_COPY: boolean
+    SUPPORTS_TABLE_ALIAS_COLUMNS: boolean
+    JOIN_HINTS: boolean
+    TABLE_HINTS: boolean
+    QUERY_HINTS: boolean
+    IS_BOOL_ALLOWED: boolean
+    ENSURE_BOOLS: boolean
+    TZ_TO_WITH_TIME_ZONE: boolean
+    AGGREGATE_FILTER_SUPPORTED: boolean
+    SEMI_ANTI_JOIN_WITH_SIDE: boolean
+    TABLESAMPLE_REQUIRES_PARENS: boolean
+    CTE_RECURSIVE_KEYWORD_REQUIRED: boolean
+    UNPIVOT_ALIASES_ARE_IDENTIFIERS: boolean
+    SUPPORTS_SELECT_INTO: boolean
+    STAR_EXCEPT: "EXCEPT" | "EXCLUDE" | null
+    CONCAT_COALESCE: boolean
+    SAFE_DIVISION: boolean
+    TYPED_DIVISION: boolean
+  } = {
     ...Generator.FEATURES,
     NULL_ORDERING_SUPPORTED: false,
     INTERVAL_ALLOWS_PLURAL_FORM: false,
@@ -788,14 +826,15 @@ export class BigQueryDialect extends Dialect {
   static override BYTE_START: string | null = "b'"
   static override BYTE_END: string | null = "'"
   static override PRESERVE_ORIGINAL_NAMES = true
-  static override STRING_ESCAPES = ["\\"]
-  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    BigQueryDialect.UNESCAPED_SEQUENCES,
-  )
+  static override STRING_ESCAPES: string[] = ["\\"]
+  static override UNESCAPED_SEQUENCES: Record<string, string> =
+    buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(BigQueryDialect.UNESCAPED_SEQUENCES)
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  protected static override ParserClass = BigQueryParser
-  protected static override GeneratorClass = BigQueryGenerator
+  protected static override ParserClass: typeof BigQueryParser = BigQueryParser
+  protected static override GeneratorClass: typeof BigQueryGenerator =
+    BigQueryGenerator
 
   override createTokenizer(): Tokenizer {
     return new Tokenizer({

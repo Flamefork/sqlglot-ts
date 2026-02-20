@@ -10,7 +10,7 @@ import {
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import type { Generator } from "../generator.js"
-import { Parser } from "../parser.js"
+import { FunctionBuilder, Parser } from "../parser.js"
 import {
   dateDeltaSql,
   eliminateSemiAndAntiJoins,
@@ -24,7 +24,7 @@ import { PostgresGenerator } from "./postgres.js"
 type Transform = (generator: Generator, expression: exp.Expression) => string
 
 export class RedshiftParser extends Parser {
-  static override FUNCTIONS = new Map([
+  static override FUNCTIONS: Map<string, FunctionBuilder> = new Map([
     ...Parser.FUNCTIONS,
     ["GETDATE", () => new exp.CurrentTimestamp({})],
     [
@@ -56,10 +56,9 @@ export class RedshiftGenerator extends PostgresGenerator {
   static override HEX_START: string | null = null
   static override HEX_END: string | null = null
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    buildUnescapedSequences(),
-  )
-  static override STRING_ESCAPES = ["\\", "'"]
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(buildUnescapedSequences())
+  static override STRING_ESCAPES: string[] = ["\\", "'"]
 
   static override TRANSFORMS: Map<ExpressionClass, Transform> = new Map<
     ExpressionClass,
@@ -115,14 +114,15 @@ export class RedshiftDialect extends Dialect {
   static override readonly name = "redshift"
   static override INDEX_OFFSET = 0
   static override HEX_LOWERCASE = true
-  static override STRING_ESCAPES = ["\\", "'"]
-  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    RedshiftDialect.UNESCAPED_SEQUENCES,
-  )
+  static override STRING_ESCAPES: string[] = ["\\", "'"]
+  static override UNESCAPED_SEQUENCES: Record<string, string> =
+    buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(RedshiftDialect.UNESCAPED_SEQUENCES)
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  protected static override ParserClass = RedshiftParser
-  protected static override GeneratorClass = RedshiftGenerator
+  protected static override ParserClass: typeof RedshiftParser = RedshiftParser
+  protected static override GeneratorClass: typeof RedshiftGenerator =
+    RedshiftGenerator
 }
 
 Dialect.register(RedshiftDialect)

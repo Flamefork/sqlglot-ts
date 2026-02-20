@@ -351,9 +351,7 @@ export class Parser {
   ])
 
   static EXPRESSION_PARSERS: Map<
-    new (
-      ...args: unknown[]
-    ) => exp.Expression,
+    new (...args: unknown[]) => exp.Expression,
     ExpressionParser
   > = new Map([
     // Can be extended by dialects, currently empty as placeholder

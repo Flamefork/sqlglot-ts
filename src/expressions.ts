@@ -103,7 +103,9 @@ export class DataType extends GeneratedDataType {
     UNKNOWN: "UNKNOWN",
   } as const
 
-  static readonly TEXT_TYPES = new Set([
+  static readonly TEXT_TYPES: Set<
+    "CHAR" | "NCHAR" | "VARCHAR" | "NVARCHAR" | "TEXT"
+  > = new Set([
     DataType.Type.CHAR,
     DataType.Type.NCHAR,
     DataType.Type.VARCHAR,
@@ -111,29 +113,32 @@ export class DataType extends GeneratedDataType {
     DataType.Type.TEXT,
   ])
 
-  static readonly FLOAT_TYPES = new Set([
+  static readonly FLOAT_TYPES: Set<"FLOAT" | "DOUBLE"> = new Set([
     DataType.Type.DOUBLE,
     DataType.Type.FLOAT,
   ])
 
-  static readonly REAL_TYPES = new Set([
+  static readonly REAL_TYPES: Set<"FLOAT" | "DOUBLE" | "DECIMAL"> = new Set([
     ...DataType.FLOAT_TYPES,
     DataType.Type.DECIMAL,
   ])
 
-  static readonly INTEGER_TYPES = new Set([
+  static readonly INTEGER_TYPES: Set<
+    "INT" | "TINYINT" | "SMALLINT" | "BIGINT"
+  > = new Set([
     DataType.Type.INT,
     DataType.Type.TINYINT,
     DataType.Type.SMALLINT,
     DataType.Type.BIGINT,
   ])
 
-  static readonly NUMERIC_TYPES = new Set([
-    ...DataType.INTEGER_TYPES,
-    ...DataType.REAL_TYPES,
-  ])
+  static readonly NUMERIC_TYPES: Set<
+    "INT" | "TINYINT" | "SMALLINT" | "BIGINT" | "FLOAT" | "DOUBLE" | "DECIMAL"
+  > = new Set([...DataType.INTEGER_TYPES, ...DataType.REAL_TYPES])
 
-  static readonly TEMPORAL_TYPES = new Set([
+  static readonly TEMPORAL_TYPES: Set<
+    "DATE" | "DATETIME" | "TIME" | "TIMESTAMP" | "TIMESTAMPTZ"
+  > = new Set([
     DataType.Type.DATE,
     DataType.Type.DATETIME,
     DataType.Type.TIME,

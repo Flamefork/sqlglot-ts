@@ -10,6 +10,7 @@ import {
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import type { Generator } from "../generator.js"
+import { FunctionBuilder } from "../parser.js"
 import {
   anyToExists,
   eliminateDistinctOn,
@@ -26,7 +27,7 @@ import { HiveGenerator, HiveParser } from "./hive.js"
 type Transform = (generator: Generator, expression: exp.Expression) => string
 
 export class SparkParser extends HiveParser {
-  static override FUNCTIONS = new Map([
+  static override FUNCTIONS: Map<string, FunctionBuilder> = new Map([
     ...HiveParser.FUNCTIONS,
     [
       "ARRAY_INSERT",
@@ -361,14 +362,15 @@ export class SparkGenerator extends Spark2Generator {
 export class SparkDialect extends Dialect {
   static override readonly name = "spark"
   static override SAFE_DIVISION = true
-  static override STRING_ESCAPES = ["\\"]
-  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    SparkDialect.UNESCAPED_SEQUENCES,
-  )
+  static override STRING_ESCAPES: string[] = ["\\"]
+  static override UNESCAPED_SEQUENCES: Record<string, string> =
+    buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(SparkDialect.UNESCAPED_SEQUENCES)
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  protected static override ParserClass = SparkParser
-  protected static override GeneratorClass = SparkGenerator
+  protected static override ParserClass: typeof SparkParser = SparkParser
+  protected static override GeneratorClass: typeof SparkGenerator =
+    SparkGenerator
 }
 
 // Register dialect
@@ -377,14 +379,15 @@ Dialect.register(SparkDialect)
 export class Spark2Dialect extends Dialect {
   static override readonly name = "spark2"
   static override SAFE_DIVISION = true
-  static override STRING_ESCAPES = ["\\"]
-  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    Spark2Dialect.UNESCAPED_SEQUENCES,
-  )
+  static override STRING_ESCAPES: string[] = ["\\"]
+  static override UNESCAPED_SEQUENCES: Record<string, string> =
+    buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(Spark2Dialect.UNESCAPED_SEQUENCES)
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  protected static override ParserClass = SparkParser
-  protected static override GeneratorClass = Spark2Generator
+  protected static override ParserClass: typeof SparkParser = SparkParser
+  protected static override GeneratorClass: typeof Spark2Generator =
+    Spark2Generator
 }
 
 Dialect.register(Spark2Dialect)

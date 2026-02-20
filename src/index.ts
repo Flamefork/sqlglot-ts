@@ -3,57 +3,25 @@
  * Port of SQLGlot (https://github.com/tobymao/sqlglot)
  */
 
-export { TokenType, Token, Tokenizer } from "./tokens.js"
-export { Expression, indexOffsetLogs, select, from_ } from "./expressions.js"
-export { Parser } from "./parser.js"
-export { Generator } from "./generator.js"
-export type { GenerateOptions } from "./generator.js"
 export { Dialect, type DialectOptions } from "./dialect.js"
-export { formatTime } from "./time.js"
-export { annotateTypes } from "./optimizer/annotate_types.js"
-export { ErrorLevel, ParseError } from "./errors.js"
 export type { ParseErrorDetail } from "./errors.js"
+export { ErrorLevel, ParseError } from "./errors.js"
+export { Expression, from_, indexOffsetLogs, select } from "./expressions.js"
+export type { GenerateOptions } from "./generator.js"
+export { Generator } from "./generator.js"
+export { annotateTypes } from "./optimizer/annotate_types.js"
+export { Parser } from "./parser.js"
 export { dump, load } from "./serde.js"
+export { formatTime } from "./time.js"
+export { Token, Tokenizer, TokenType } from "./tokens.js"
 
 import { Dialect } from "./dialect.js"
 import { Expression } from "./expressions.js"
 import type { GenerateOptions } from "./generator.js"
 
-// Import dialects to trigger registration
-import "./dialects/athena.js"
-import "./dialects/bigquery.js"
-import "./dialects/clickhouse.js"
-import "./dialects/databricks.js"
-import "./dialects/doris.js"
-import "./dialects/dremio.js"
-import "./dialects/drill.js"
-import "./dialects/druid.js"
-import "./dialects/duckdb.js"
-import "./dialects/dune.js"
-import "./dialects/exasol.js"
-import "./dialects/fabric.js"
-import "./dialects/hive.js"
-import "./dialects/materialize.js"
-import "./dialects/mysql.js"
-import "./dialects/oracle.js"
-import "./dialects/postgres.js"
-import "./dialects/presto.js"
-import "./dialects/prql.js"
-import "./dialects/redshift.js"
-import "./dialects/risingwave.js"
-import "./dialects/singlestore.js"
-import "./dialects/snowflake.js"
-import "./dialects/solr.js"
-import "./dialects/spark.js"
-import "./dialects/sqlite.js"
-import "./dialects/starrocks.js"
-import "./dialects/tableau.js"
-import "./dialects/teradata.js"
-import "./dialects/trino.js"
-import "./dialects/tsql.js"
-
 // Initialize Expression.dump/load methods
 import { dump as _dump, load as _load } from "./serde.js"
+
 Expression.setSerdeImpl(_dump, (payloads) => _load(payloads)!)
 
 // Initialize Expression.parseImpl() method

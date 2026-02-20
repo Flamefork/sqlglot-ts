@@ -11,10 +11,9 @@ import { PrestoGenerator, PrestoParser } from "./presto.js"
 
 export class AthenaGenerator extends PrestoGenerator {
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    buildUnescapedSequences(),
-  )
-  static override STRING_ESCAPES = ["'", "\\"]
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(buildUnescapedSequences())
+  static override STRING_ESCAPES: string[] = ["'", "\\"]
 }
 
 export class AthenaDialect extends Dialect {
@@ -24,14 +23,15 @@ export class AthenaDialect extends Dialect {
     | "nulls_are_large"
     | "nulls_are_last" = "nulls_are_last"
   static override INDEX_OFFSET = 1
-  static override STRING_ESCAPES = ["'", "\\"]
-  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    AthenaDialect.UNESCAPED_SEQUENCES,
-  )
+  static override STRING_ESCAPES: string[] = ["'", "\\"]
+  static override UNESCAPED_SEQUENCES: Record<string, string> =
+    buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(AthenaDialect.UNESCAPED_SEQUENCES)
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  protected static override ParserClass = PrestoParser
-  protected static override GeneratorClass = AthenaGenerator
+  protected static override ParserClass: typeof PrestoParser = PrestoParser
+  protected static override GeneratorClass: typeof AthenaGenerator =
+    AthenaGenerator
 }
 
 // Register dialect

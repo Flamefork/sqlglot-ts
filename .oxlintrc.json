@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "import"],
+  "categories": {
+    "correctness": "deny"
+  },
+  "rules": {
+    "no-console": ["error", { "allow": ["warn", "error"] }],
+    "no-control-regex": "off",
+    "no-unused-private-class-members": "error",
+    "@typescript-eslint/no-unused-vars": "error",
+    "unicorn/no-thenable": "off",
+    "unicorn/no-useless-spread": "off",
+    "yoda": "error"
+  },
+  "ignorePatterns": ["dist", "sqlglot", "src/expressions.generated.ts"]
+}

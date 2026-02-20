@@ -7,7 +7,8 @@ import { PostgresGenerator } from "./postgres.js"
 
 export class RisingWaveDialect extends Dialect {
   static override readonly name = "risingwave"
-  protected static override GeneratorClass = PostgresGenerator
+  protected static override GeneratorClass: typeof PostgresGenerator =
+    PostgresGenerator
 }
 
 // Register dialect

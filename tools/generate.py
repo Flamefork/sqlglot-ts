@@ -453,7 +453,7 @@ def generate_typescript(classes: list[ClassInfo]) -> str:
     lines.append(" * Run: npm run generate")
     lines.append(" */")
     lines.append("")
-    lines.append("import { Expression, maybeParse, _applyBuilder, _applyListBuilder, _applyChildListBuilder, _applyConjunctionBuilder } from './expression-base.js';")
+    lines.append("import { Expression, type ExpressionClass, maybeParse, _applyBuilder, _applyListBuilder, _applyChildListBuilder, _applyConjunctionBuilder } from './expression-base.js';")
     lines.append("")
     lines.append("function camelToSnakeCase(s: string): string {")
     lines.append("  return s.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase();")
@@ -495,7 +495,7 @@ def generate_typescript(classes: list[ClassInfo]) -> str:
 
         if has_sql_names and cls.sql_names:
             sql_names_str = ", ".join(f"'{n}'" for n in cls.sql_names)
-            lines.append(f"  static readonly sqlNames = [{sql_names_str}];")
+            lines.append(f"  static readonly sqlNames: readonly string[] = [{sql_names_str}];")
 
         key = cls.name.lower()
         needs_override = parent != "Expression"
@@ -518,10 +518,12 @@ def generate_typescript(classes: list[ClassInfo]) -> str:
         lines.append("}")
         lines.append("")
 
-    lines.append("export const GENERATED_CLASSES = [")
+    lines.append("type NamedExpressionClass = ExpressionClass & { readonly className: string };")
+    lines.append("")
+    lines.append("export const GENERATED_CLASSES: readonly NamedExpressionClass[] = [")
     for name in generated_names:
         lines.append(f"  {name},")
-    lines.append("] as const;")
+    lines.append("];")
     lines.append("")
 
     multi_map = compute_multi_inheritance_map(classes)

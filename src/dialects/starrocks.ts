@@ -66,8 +66,10 @@ export class StarRocksDialect extends Dialect {
   static override readonly name = "starrocks"
   static override INDEX_OFFSET = 1
   static override SAFE_DIVISION = true
-  protected static override ParserClass = StarRocksParser
-  protected static override GeneratorClass = StarRocksGenerator
+  protected static override ParserClass: typeof StarRocksParser =
+    StarRocksParser
+  protected static override GeneratorClass: typeof StarRocksGenerator =
+    StarRocksGenerator
 }
 
 Dialect.register(StarRocksDialect)

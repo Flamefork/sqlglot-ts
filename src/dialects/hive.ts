@@ -3,14 +3,14 @@
  */
 
 import {
-  Dialect,
   buildEscapedSequences,
   buildUnescapedSequences,
+  Dialect,
 } from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
-import { Parser } from "../parser.js"
+import { type FunctionBuilder, Parser } from "../parser.js"
 import { formatTime } from "../time.js"
 import { TokenType } from "../tokens.js"
 import {
@@ -27,7 +27,6 @@ import {
 } from "../transforms.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
-type FunctionBuilder = (args: exp.Expression[]) => exp.Expression
 
 const NUMERIC_LITERALS: Map<string, string> = new Map([
   ["D", "DOUBLE"],
@@ -89,7 +88,7 @@ function buildFormattedTime(
   ExprClass: new (args: exp.Args) => exp.Expression,
   useDefault: boolean,
 ): FunctionBuilder {
-  return (args: exp.Expression[]) => {
+  return (args: exp.Expression[], _dialect) => {
     const fmt =
       args[1] ??
       (useDefault
@@ -143,7 +142,7 @@ export class HiveParser extends Parser {
     return new ExprClass(args)
   }
 
-  static override FUNCTIONS = new Map([
+  static override FUNCTIONS: Map<string, FunctionBuilder> = new Map([
     ...Parser.FUNCTIONS,
     ["SIZE", (args: exp.Expression[]) => new exp.ArraySize({ this: args[0] })],
     [
@@ -204,12 +203,12 @@ export class HiveParser extends Parser {
     ],
     [
       "DATE_FORMAT",
-      (args: exp.Expression[]) => {
+      (args: exp.Expression[], dialect) => {
         const fmtArgs: exp.Expression[] = [
           new exp.TimeStrToTime({ this: args[0] }),
         ]
         if (args[1]) fmtArgs.push(args[1])
-        return buildFormattedTime(exp.TimeToStr, false)(fmtArgs)
+        return buildFormattedTime(exp.TimeToStr, false)(fmtArgs, dialect)
       },
     ],
     [
@@ -233,19 +232,19 @@ export class HiveParser extends Parser {
     ],
     [
       "TO_DATE",
-      (args: exp.Expression[]) => {
-        const expr = buildFormattedTime(exp.TsOrDsToDate, false)(args)
+      (args: exp.Expression[], dialect) => {
+        const expr = buildFormattedTime(exp.TsOrDsToDate, false)(args, dialect)
         expr.args.safe = true
         return expr
       },
     ],
     [
       "UNIX_TIMESTAMP",
-      (args: exp.Expression[]) =>
-        buildFormattedTime(
-          exp.StrToUnix,
-          true,
-        )(args.length > 0 ? args : [new exp.CurrentTimestamp({})]),
+      (args: exp.Expression[], dialect) =>
+        buildFormattedTime(exp.StrToUnix, true)(
+          args.length > 0 ? args : [new exp.CurrentTimestamp({})],
+          dialect,
+        ),
     ],
     [
       "YEAR",
@@ -279,12 +278,50 @@ export class HiveGenerator extends Generator {
   protected override ALTER_SET_TYPE = ""
 
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    buildUnescapedSequences(),
-  )
-  static override STRING_ESCAPES = ["\\"]
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(buildUnescapedSequences())
+  static override STRING_ESCAPES: string[] = ["\\"]
 
-  static override FEATURES = {
+  static override FEATURES: {
+    SAFE_DIVISION: boolean
+    NULL_ORDERING_SUPPORTED: boolean | null
+    LOCKING_READS_SUPPORTED: boolean
+    LIMIT_FETCH: "ALL" | "LIMIT" | "FETCH"
+    LIMIT_IS_TOP: boolean
+    EXTRACT_ALLOWS_QUOTES: boolean
+    IGNORE_NULLS_IN_FUNC: boolean
+    NVL2_SUPPORTED: boolean
+    SUPPORTS_SINGLE_ARG_CONCAT: boolean
+    LAST_DAY_SUPPORTS_DATE_PART: boolean
+    COLLATE_IS_FUNC: boolean
+    EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE: boolean
+    WRAP_DERIVED_VALUES: boolean
+    VALUES_AS_TABLE: boolean
+    SINGLE_STRING_INTERVAL: boolean
+    INTERVAL_ALLOWS_PLURAL_FORM: boolean
+    RENAME_TABLE_WITH_DB: boolean
+    ALTER_TABLE_INCLUDE_COLUMN_KEYWORD: boolean
+    ALTER_TABLE_ADD_REQUIRED_FOR_EACH_COLUMN: boolean
+    ALTER_TABLE_SUPPORTS_CASCADE: boolean
+    SUPPORTS_TABLE_COPY: boolean
+    SUPPORTS_TABLE_ALIAS_COLUMNS: boolean
+    JOIN_HINTS: boolean
+    TABLE_HINTS: boolean
+    QUERY_HINTS: boolean
+    IS_BOOL_ALLOWED: boolean
+    ENSURE_BOOLS: boolean
+    TZ_TO_WITH_TIME_ZONE: boolean
+    UNNEST_WITH_ORDINALITY: boolean
+    AGGREGATE_FILTER_SUPPORTED: boolean
+    SEMI_ANTI_JOIN_WITH_SIDE: boolean
+    TABLESAMPLE_REQUIRES_PARENS: boolean
+    CTE_RECURSIVE_KEYWORD_REQUIRED: boolean
+    UNPIVOT_ALIASES_ARE_IDENTIFIERS: boolean
+    SUPPORTS_SELECT_INTO: boolean
+    STAR_EXCEPT: "EXCEPT" | "EXCLUDE" | null
+    CONCAT_COALESCE: boolean
+    TYPED_DIVISION: boolean
+  } = {
     ...Generator.FEATURES,
     SAFE_DIVISION: true,
   }
@@ -549,15 +586,15 @@ export class HiveGenerator extends Generator {
 export class HiveDialect extends Dialect {
   static override readonly name = "hive"
   static override SAFE_DIVISION = true
-  static override TIME_MAPPING = HIVE_TIME_MAPPING
-  static override STRING_ESCAPES = ["\\"]
-  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    HiveDialect.UNESCAPED_SEQUENCES,
-  )
+  static override TIME_MAPPING: Map<string, string> = HIVE_TIME_MAPPING
+  static override STRING_ESCAPES: string[] = ["\\"]
+  static override UNESCAPED_SEQUENCES: Record<string, string> =
+    buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(HiveDialect.UNESCAPED_SEQUENCES)
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  protected static override ParserClass = HiveParser
-  protected static override GeneratorClass = HiveGenerator
+  protected static override ParserClass: typeof HiveParser = HiveParser
+  protected static override GeneratorClass: typeof HiveGenerator = HiveGenerator
 
   constructor(options: Record<string, unknown> = {}) {
     super({

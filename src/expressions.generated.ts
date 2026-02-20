@@ -4,7 +4,7 @@
  * Run: npm run generate
  */
 
-import { Expression, maybeParse, _applyBuilder, _applyListBuilder, _applyChildListBuilder, _applyConjunctionBuilder } from './expression-base.js';
+import { Expression, type ExpressionClass, maybeParse, _applyBuilder, _applyListBuilder, _applyChildListBuilder, _applyConjunctionBuilder } from './expression-base.js';
 
 function camelToSnakeCase(s: string): string {
   return s.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase();
@@ -2756,14 +2756,14 @@ export class Abs extends Func {
 
 export class ArgMax extends AggFunc {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'count': false };
-  static readonly sqlNames = ['ARG_MAX', 'ARGMAX', 'MAX_BY'];
+  static readonly sqlNames: readonly string[] = ['ARG_MAX', 'ARGMAX', 'MAX_BY'];
   override get key(): string { return 'argmax'; }
   static readonly className: string = 'ArgMax';
 }
 
 export class ArgMin extends AggFunc {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'count': false };
-  static readonly sqlNames = ['ARG_MIN', 'ARGMIN', 'MIN_BY'];
+  static readonly sqlNames: readonly string[] = ['ARG_MIN', 'ARGMIN', 'MIN_BY'];
   override get key(): string { return 'argmin'; }
   static readonly className: string = 'ArgMin';
 }
@@ -2822,7 +2822,7 @@ export class MinhashCombine extends AggFunc {
 }
 
 export class ApproximateSimilarity extends AggFunc {
-  static readonly sqlNames = ['APPROXIMATE_SIMILARITY', 'APPROXIMATE_JACCARD_INDEX'];
+  static readonly sqlNames: readonly string[] = ['APPROXIMATE_SIMILARITY', 'APPROXIMATE_JACCARD_INDEX'];
   override get key(): string { return 'approximatesimilarity'; }
   static readonly className: string = 'ApproximateSimilarity';
 }
@@ -2830,7 +2830,7 @@ export class ApproximateSimilarity extends AggFunc {
 export class FarmFingerprint extends Func {
   static readonly argTypes: Record<string, boolean> = { 'expressions': true };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['FARM_FINGERPRINT', 'FARMFINGERPRINT64'];
+  static readonly sqlNames: readonly string[] = ['FARM_FINGERPRINT', 'FARMFINGERPRINT64'];
   override get key(): string { return 'farmfingerprint'; }
   static readonly className: string = 'FarmFingerprint';
 }
@@ -2915,7 +2915,7 @@ export class Hll extends AggFunc {
 
 export class ApproxDistinct extends AggFunc {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'accuracy': false };
-  static readonly sqlNames = ['APPROX_DISTINCT', 'APPROX_COUNT_DISTINCT'];
+  static readonly sqlNames: readonly string[] = ['APPROX_DISTINCT', 'APPROX_COUNT_DISTINCT'];
   override get key(): string { return 'approxdistinct'; }
   static readonly className: string = 'ApproxDistinct';
 }
@@ -3068,20 +3068,20 @@ export class ArrayUniqueAgg extends AggFunc {
 
 export class AIAgg extends AggFunc {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true };
-  static readonly sqlNames = ['AI_AGG'];
+  static readonly sqlNames: readonly string[] = ['AI_AGG'];
   override get key(): string { return 'aiagg'; }
   static readonly className: string = 'AIAgg';
 }
 
 export class AISummarizeAgg extends AggFunc {
-  static readonly sqlNames = ['AI_SUMMARIZE_AGG'];
+  static readonly sqlNames: readonly string[] = ['AI_SUMMARIZE_AGG'];
   override get key(): string { return 'aisummarizeagg'; }
   static readonly className: string = 'AISummarizeAgg';
 }
 
 export class AIClassify extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'categories': true, 'config': false };
-  static readonly sqlNames = ['AI_CLASSIFY'];
+  static readonly sqlNames: readonly string[] = ['AI_CLASSIFY'];
   override get key(): string { return 'aiclassify'; }
   static readonly className: string = 'AIClassify';
 }
@@ -3113,7 +3113,7 @@ export class ArrayPrepend extends Func {
 export class ArrayConcat extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expressions': false, 'null_propagation': false };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['ARRAY_CONCAT', 'ARRAY_CAT'];
+  static readonly sqlNames: readonly string[] = ['ARRAY_CONCAT', 'ARRAY_CAT'];
   override get key(): string { return 'arrayconcat'; }
   static readonly className: string = 'ArrayConcat';
 }
@@ -3150,7 +3150,7 @@ export class ArrayConstructCompact extends Func {
 // Also extends: Func
 export class ArrayContains extends Binary {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'ensure_variant': false };
-  static readonly sqlNames = ['ARRAY_CONTAINS', 'ARRAY_HAS'];
+  static readonly sqlNames: readonly string[] = ['ARRAY_CONTAINS', 'ARRAY_HAS'];
   override get key(): string { return 'arraycontains'; }
   static readonly className: string = 'ArrayContains';
   override get name(): string {
@@ -3163,7 +3163,7 @@ export class ArrayContains extends Binary {
 
 // Also extends: Func
 export class ArrayContainsAll extends Binary {
-  static readonly sqlNames = ['ARRAY_CONTAINS_ALL', 'ARRAY_HAS_ALL'];
+  static readonly sqlNames: readonly string[] = ['ARRAY_CONTAINS_ALL', 'ARRAY_HAS_ALL'];
   override get key(): string { return 'arraycontainsall'; }
   static readonly className: string = 'ArrayContainsAll';
   override get name(): string {
@@ -3176,7 +3176,7 @@ export class ArrayContainsAll extends Binary {
 
 export class ArrayFilter extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true };
-  static readonly sqlNames = ['FILTER', 'ARRAY_FILTER'];
+  static readonly sqlNames: readonly string[] = ['FILTER', 'ARRAY_FILTER'];
   override get key(): string { return 'arrayfilter'; }
   static readonly className: string = 'ArrayFilter';
 }
@@ -3204,7 +3204,7 @@ export class ArraySlice extends Func {
 
 export class ArrayToString extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'null': false };
-  static readonly sqlNames = ['ARRAY_TO_STRING', 'ARRAY_JOIN'];
+  static readonly sqlNames: readonly string[] = ['ARRAY_TO_STRING', 'ARRAY_JOIN'];
   override get key(): string { return 'arraytostring'; }
   static readonly className: string = 'ArrayToString';
 }
@@ -3212,14 +3212,14 @@ export class ArrayToString extends Func {
 export class ArrayIntersect extends Func {
   static readonly argTypes: Record<string, boolean> = { 'expressions': true };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['ARRAY_INTERSECT', 'ARRAY_INTERSECTION'];
+  static readonly sqlNames: readonly string[] = ['ARRAY_INTERSECT', 'ARRAY_INTERSECTION'];
   override get key(): string { return 'arrayintersect'; }
   static readonly className: string = 'ArrayIntersect';
 }
 
 export class StPoint extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'null': false };
-  static readonly sqlNames = ['ST_POINT', 'ST_MAKEPOINT'];
+  static readonly sqlNames: readonly string[] = ['ST_POINT', 'ST_MAKEPOINT'];
   override get key(): string { return 'stpoint'; }
   static readonly className: string = 'StPoint';
 }
@@ -3238,7 +3238,7 @@ export class String extends Func {
 
 export class StringToArray extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': false, 'null': false };
-  static readonly sqlNames = ['STRING_TO_ARRAY', 'SPLIT_BY_STRING', 'STRTOK_TO_ARRAY'];
+  static readonly sqlNames: readonly string[] = ['STRING_TO_ARRAY', 'SPLIT_BY_STRING', 'STRTOK_TO_ARRAY'];
   override get key(): string { return 'stringtoarray'; }
   static readonly className: string = 'StringToArray';
 }
@@ -3257,7 +3257,7 @@ export class ArrayOverlaps extends Binary {
 
 export class ArraySize extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': false };
-  static readonly sqlNames = ['ARRAY_SIZE', 'ARRAY_LENGTH'];
+  static readonly sqlNames: readonly string[] = ['ARRAY_SIZE', 'ARRAY_LENGTH'];
   override get key(): string { return 'arraysize'; }
   static readonly className: string = 'ArraySize';
 }
@@ -3428,7 +3428,7 @@ export class Collation extends Func {
 
 export class Ceil extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'decimals': false, 'to': false };
-  static readonly sqlNames = ['CEIL', 'CEILING'];
+  static readonly sqlNames: readonly string[] = ['CEIL', 'CEILING'];
   override get key(): string { return 'ceil'; }
   static readonly className: string = 'Ceil';
 }
@@ -3436,7 +3436,7 @@ export class Ceil extends Func {
 export class Coalesce extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expressions': false, 'is_nvl': false, 'is_null': false };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['COALESCE', 'IFNULL', 'NVL'];
+  static readonly sqlNames: readonly string[] = ['COALESCE', 'IFNULL', 'NVL'];
   override get key(): string { return 'coalesce'; }
   static readonly className: string = 'Coalesce';
 }
@@ -3444,7 +3444,7 @@ export class Coalesce extends Func {
 export class Chr extends Func {
   static readonly argTypes: Record<string, boolean> = { 'expressions': true, 'charset': false };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['CHR', 'CHAR'];
+  static readonly sqlNames: readonly string[] = ['CHR', 'CHAR'];
   override get key(): string { return 'chr'; }
   static readonly className: string = 'Chr';
 }
@@ -3457,7 +3457,7 @@ export class Concat extends Func {
 }
 
 export class ConcatWs extends Concat {
-  static readonly sqlNames = ['CONCAT_WS'];
+  static readonly sqlNames: readonly string[] = ['CONCAT_WS'];
   override get key(): string { return 'concatws'; }
   static readonly className: string = 'ConcatWs';
 }
@@ -3481,7 +3481,7 @@ export class Count extends AggFunc {
 }
 
 export class CountIf extends AggFunc {
-  static readonly sqlNames = ['COUNT_IF', 'COUNTIF'];
+  static readonly sqlNames: readonly string[] = ['COUNT_IF', 'COUNTIF'];
   override get key(): string { return 'countif'; }
   static readonly className: string = 'CountIf';
 }
@@ -3719,7 +3719,7 @@ export class DateSub extends Func {
 // Also extends: TimeUnit
 export class DateDiff extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'unit': false, 'zone': false, 'big_int': false, 'date_part_boundary': false };
-  static readonly sqlNames = ['DATEDIFF', 'DATE_DIFF'];
+  static readonly sqlNames: readonly string[] = ['DATEDIFF', 'DATE_DIFF'];
   override get key(): string { return 'datediff'; }
   static readonly className: string = 'DateDiff';
 }
@@ -3770,25 +3770,25 @@ export class DateFromUnixDate extends Func {
 }
 
 export class DayOfWeek extends Func {
-  static readonly sqlNames = ['DAY_OF_WEEK', 'DAYOFWEEK'];
+  static readonly sqlNames: readonly string[] = ['DAY_OF_WEEK', 'DAYOFWEEK'];
   override get key(): string { return 'dayofweek'; }
   static readonly className: string = 'DayOfWeek';
 }
 
 export class DayOfWeekIso extends Func {
-  static readonly sqlNames = ['DAYOFWEEK_ISO', 'ISODOW'];
+  static readonly sqlNames: readonly string[] = ['DAYOFWEEK_ISO', 'ISODOW'];
   override get key(): string { return 'dayofweekiso'; }
   static readonly className: string = 'DayOfWeekIso';
 }
 
 export class DayOfMonth extends Func {
-  static readonly sqlNames = ['DAY_OF_MONTH', 'DAYOFMONTH'];
+  static readonly sqlNames: readonly string[] = ['DAY_OF_MONTH', 'DAYOFMONTH'];
   override get key(): string { return 'dayofmonth'; }
   static readonly className: string = 'DayOfMonth';
 }
 
 export class DayOfYear extends Func {
-  static readonly sqlNames = ['DAY_OF_YEAR', 'DAYOFYEAR'];
+  static readonly sqlNames: readonly string[] = ['DAY_OF_YEAR', 'DAYOFYEAR'];
   override get key(): string { return 'dayofyear'; }
   static readonly className: string = 'DayOfYear';
 }
@@ -3805,19 +3805,19 @@ export class ToDays extends Func {
 }
 
 export class WeekOfYear extends Func {
-  static readonly sqlNames = ['WEEK_OF_YEAR', 'WEEKOFYEAR'];
+  static readonly sqlNames: readonly string[] = ['WEEK_OF_YEAR', 'WEEKOFYEAR'];
   override get key(): string { return 'weekofyear'; }
   static readonly className: string = 'WeekOfYear';
 }
 
 export class YearOfWeek extends Func {
-  static readonly sqlNames = ['YEAR_OF_WEEK', 'YEAROFWEEK'];
+  static readonly sqlNames: readonly string[] = ['YEAR_OF_WEEK', 'YEAROFWEEK'];
   override get key(): string { return 'yearofweek'; }
   static readonly className: string = 'YearOfWeek';
 }
 
 export class YearOfWeekIso extends Func {
-  static readonly sqlNames = ['YEAR_OF_WEEK_ISO', 'YEAROFWEEKISO'];
+  static readonly sqlNames: readonly string[] = ['YEAR_OF_WEEK_ISO', 'YEAROFWEEKISO'];
   override get key(): string { return 'yearofweekiso'; }
   static readonly className: string = 'YearOfWeekIso';
 }
@@ -3837,7 +3837,7 @@ export class MakeInterval extends Func {
 // Also extends: TimeUnit
 export class LastDay extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'unit': false };
-  static readonly sqlNames = ['LAST_DAY', 'LAST_DAY_OF_MONTH'];
+  static readonly sqlNames: readonly string[] = ['LAST_DAY', 'LAST_DAY_OF_MONTH'];
   override get key(): string { return 'lastday'; }
   static readonly className: string = 'LastDay';
 }
@@ -3911,7 +3911,7 @@ export class TimestampSub extends Func {
 // Also extends: TimeUnit
 export class TimestampDiff extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'unit': false };
-  static readonly sqlNames = ['TIMESTAMPDIFF', 'TIMESTAMP_DIFF'];
+  static readonly sqlNames: readonly string[] = ['TIMESTAMPDIFF', 'TIMESTAMP_DIFF'];
   override get key(): string { return 'timestampdiff'; }
   static readonly className: string = 'TimestampDiff';
 }
@@ -3960,14 +3960,14 @@ export class TimeTrunc extends Func {
 
 export class DateFromParts extends Func {
   static readonly argTypes: Record<string, boolean> = { 'year': true, 'month': false, 'day': false, 'allow_overflow': false };
-  static readonly sqlNames = ['DATE_FROM_PARTS', 'DATEFROMPARTS'];
+  static readonly sqlNames: readonly string[] = ['DATE_FROM_PARTS', 'DATEFROMPARTS'];
   override get key(): string { return 'datefromparts'; }
   static readonly className: string = 'DateFromParts';
 }
 
 export class TimeFromParts extends Func {
   static readonly argTypes: Record<string, boolean> = { 'hour': true, 'min': true, 'sec': true, 'nano': false, 'fractions': false, 'precision': false, 'overflow': false };
-  static readonly sqlNames = ['TIME_FROM_PARTS', 'TIMEFROMPARTS'];
+  static readonly sqlNames: readonly string[] = ['TIME_FROM_PARTS', 'TIMEFROMPARTS'];
   override get key(): string { return 'timefromparts'; }
   static readonly className: string = 'TimeFromParts';
 }
@@ -4184,7 +4184,7 @@ export class TryHexDecodeString extends Func {
 }
 
 export class FromISO8601Timestamp extends Func {
-  static readonly sqlNames = ['FROM_ISO8601_TIMESTAMP'];
+  static readonly sqlNames: readonly string[] = ['FROM_ISO8601_TIMESTAMP'];
   override get key(): string { return 'fromiso8601timestamp'; }
   static readonly className: string = 'FromISO8601Timestamp';
 }
@@ -4215,7 +4215,7 @@ export class GetExtract extends Func {
 
 export class Getbit extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'zero_is_msb': false };
-  static readonly sqlNames = ['GETBIT', 'GET_BIT'];
+  static readonly sqlNames: readonly string[] = ['GETBIT', 'GET_BIT'];
   override get key(): string { return 'getbit'; }
   static readonly className: string = 'Getbit';
 }
@@ -4333,7 +4333,7 @@ export class Xor extends Connector {
 
 export class If extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'true': true, 'false': false };
-  static readonly sqlNames = ['IF', 'IIF'];
+  static readonly sqlNames: readonly string[] = ['IF', 'IIF'];
   override get key(): string { return 'if'; }
   static readonly className: string = 'If';
 }
@@ -4356,7 +4356,7 @@ export class IsAscii extends Func {
 }
 
 export class IsNan extends Func {
-  static readonly sqlNames = ['IS_NAN', 'ISNAN'];
+  static readonly sqlNames: readonly string[] = ['IS_NAN', 'ISNAN'];
   override get key(): string { return 'isnan'; }
   static readonly className: string = 'IsNan';
 }
@@ -4367,7 +4367,7 @@ export class Int64 extends Func {
 }
 
 export class IsInf extends Func {
-  static readonly sqlNames = ['IS_INF', 'ISINF'];
+  static readonly sqlNames: readonly string[] = ['IS_INF', 'ISINF'];
   override get key(): string { return 'isinf'; }
   static readonly className: string = 'IsInf';
 }
@@ -4473,7 +4473,7 @@ export class Format extends Func {
 export class JSONKeys extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': false, 'expressions': false };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['JSON_KEYS'];
+  static readonly sqlNames: readonly string[] = ['JSON_KEYS'];
   override get key(): string { return 'jsonkeys'; }
   static readonly className: string = 'JSONKeys';
 }
@@ -4541,14 +4541,14 @@ export class JSONSchema extends Expression {
 export class JSONSet extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expressions': true };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['JSON_SET'];
+  static readonly sqlNames: readonly string[] = ['JSON_SET'];
   override get key(): string { return 'jsonset'; }
   static readonly className: string = 'JSONSet';
 }
 
 export class JSONStripNulls extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': false, 'include_arrays': false, 'remove_empty': false };
-  static readonly sqlNames = ['JSON_STRIP_NULLS'];
+  static readonly sqlNames: readonly string[] = ['JSON_STRIP_NULLS'];
   override get key(): string { return 'jsonstripnulls'; }
   static readonly className: string = 'JSONStripNulls';
 }
@@ -4568,7 +4568,7 @@ export class JSONValueArray extends Func {
 export class JSONRemove extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expressions': true };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['JSON_REMOVE'];
+  static readonly sqlNames: readonly string[] = ['JSON_REMOVE'];
   override get key(): string { return 'jsonremove'; }
   static readonly className: string = 'JSONRemove';
 }
@@ -4581,7 +4581,7 @@ export class JSONTable extends Func {
 
 export class JSONType extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': false };
-  static readonly sqlNames = ['JSON_TYPE'];
+  static readonly sqlNames: readonly string[] = ['JSON_TYPE'];
   override get key(): string { return 'jsontype'; }
   static readonly className: string = 'JSONType';
 }
@@ -4606,7 +4606,7 @@ export class OpenJSON extends Func {
 
 // Also extends: Func
 export class JSONBContains extends Binary {
-  static readonly sqlNames = ['JSONB_CONTAINS'];
+  static readonly sqlNames: readonly string[] = ['JSONB_CONTAINS'];
   override get key(): string { return 'jsonbcontains'; }
   static readonly className: string = 'JSONBContains';
   override get name(): string {
@@ -4643,7 +4643,7 @@ export class JSONBContainsAllTopKeys extends Binary {
 
 export class JSONBExists extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'path': true };
-  static readonly sqlNames = ['JSONB_EXISTS'];
+  static readonly sqlNames: readonly string[] = ['JSONB_EXISTS'];
   override get key(): string { return 'jsonbexists'; }
   static readonly className: string = 'JSONBExists';
 }
@@ -4664,7 +4664,7 @@ export class JSONBDeleteAtPath extends Binary {
 export class JSONExtract extends Binary {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'only_json_types': false, 'expressions': false, 'variant_extract': false, 'json_query': false, 'option': false, 'quote': false, 'on_condition': false, 'requires_json': false };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['JSON_EXTRACT'];
+  static readonly sqlNames: readonly string[] = ['JSON_EXTRACT'];
   override get key(): string { return 'jsonextract'; }
   static readonly className: string = 'JSONExtract';
   override get name(): string {
@@ -4683,7 +4683,7 @@ export class JSONExtractQuote extends Expression {
 
 export class JSONExtractArray extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': false };
-  static readonly sqlNames = ['JSON_EXTRACT_ARRAY'];
+  static readonly sqlNames: readonly string[] = ['JSON_EXTRACT_ARRAY'];
   override get key(): string { return 'jsonextractarray'; }
   static readonly className: string = 'JSONExtractArray';
 }
@@ -4692,7 +4692,7 @@ export class JSONExtractArray extends Func {
 export class JSONExtractScalar extends Binary {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'only_json_types': false, 'expressions': false, 'json_type': false, 'scalar_only': false };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['JSON_EXTRACT_SCALAR'];
+  static readonly sqlNames: readonly string[] = ['JSON_EXTRACT_SCALAR'];
   override get key(): string { return 'jsonextractscalar'; }
   static readonly className: string = 'JSONExtractScalar';
   override get name(): string {
@@ -4705,7 +4705,7 @@ export class JSONExtractScalar extends Binary {
 
 // Also extends: Func
 export class JSONBExtract extends Binary {
-  static readonly sqlNames = ['JSONB_EXTRACT'];
+  static readonly sqlNames: readonly string[] = ['JSONB_EXTRACT'];
   override get key(): string { return 'jsonbextract'; }
   static readonly className: string = 'JSONBExtract';
   override get name(): string {
@@ -4719,7 +4719,7 @@ export class JSONBExtract extends Binary {
 // Also extends: Func
 export class JSONBExtractScalar extends Binary {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'json_type': false };
-  static readonly sqlNames = ['JSONB_EXTRACT_SCALAR'];
+  static readonly sqlNames: readonly string[] = ['JSONB_EXTRACT_SCALAR'];
   override get key(): string { return 'jsonbextractscalar'; }
   static readonly className: string = 'JSONBExtractScalar';
   override get name(): string {
@@ -4732,7 +4732,7 @@ export class JSONBExtractScalar extends Binary {
 
 export class JSONFormat extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': false, 'options': false, 'is_json': false, 'to_json': false };
-  static readonly sqlNames = ['JSON_FORMAT'];
+  static readonly sqlNames: readonly string[] = ['JSON_FORMAT'];
   override get key(): string { return 'jsonformat'; }
   static readonly className: string = 'JSONFormat';
 }
@@ -4740,7 +4740,7 @@ export class JSONFormat extends Func {
 export class JSONArrayAppend extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expressions': true };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['JSON_ARRAY_APPEND'];
+  static readonly sqlNames: readonly string[] = ['JSON_ARRAY_APPEND'];
   override get key(): string { return 'jsonarrayappend'; }
   static readonly className: string = 'JSONArrayAppend';
 }
@@ -4748,7 +4748,7 @@ export class JSONArrayAppend extends Func {
 // Also extends: Predicate, Func
 export class JSONArrayContains extends Binary {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'json_type': false };
-  static readonly sqlNames = ['JSON_ARRAY_CONTAINS'];
+  static readonly sqlNames: readonly string[] = ['JSON_ARRAY_CONTAINS'];
   override get key(): string { return 'jsonarraycontains'; }
   static readonly className: string = 'JSONArrayContains';
   override get name(): string {
@@ -4762,7 +4762,7 @@ export class JSONArrayContains extends Binary {
 export class JSONArrayInsert extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expressions': true };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['JSON_ARRAY_INSERT'];
+  static readonly sqlNames: readonly string[] = ['JSON_ARRAY_INSERT'];
   override get key(): string { return 'jsonarrayinsert'; }
   static readonly className: string = 'JSONArrayInsert';
 }
@@ -4779,7 +4779,7 @@ export class ParseNumeric extends Func {
 
 export class ParseJSON extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': false, 'safe': false };
-  static readonly sqlNames = ['PARSE_JSON', 'JSON_PARSE'];
+  static readonly sqlNames: readonly string[] = ['PARSE_JSON', 'JSON_PARSE'];
   override get key(): string { return 'parsejson'; }
   static readonly className: string = 'ParseJSON';
 }
@@ -4834,7 +4834,7 @@ export class Reverse extends Func {
 
 export class Length extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'binary': false, 'encoding': false };
-  static readonly sqlNames = ['LENGTH', 'LEN', 'CHAR_LENGTH', 'CHARACTER_LENGTH'];
+  static readonly sqlNames: readonly string[] = ['LENGTH', 'LEN', 'CHAR_LENGTH', 'CHARACTER_LENGTH'];
   override get key(): string { return 'length'; }
   static readonly className: string = 'Length';
 }
@@ -4867,19 +4867,19 @@ export class Log extends Func {
 }
 
 export class LogicalOr extends AggFunc {
-  static readonly sqlNames = ['LOGICAL_OR', 'BOOL_OR', 'BOOLOR_AGG'];
+  static readonly sqlNames: readonly string[] = ['LOGICAL_OR', 'BOOL_OR', 'BOOLOR_AGG'];
   override get key(): string { return 'logicalor'; }
   static readonly className: string = 'LogicalOr';
 }
 
 export class LogicalAnd extends AggFunc {
-  static readonly sqlNames = ['LOGICAL_AND', 'BOOL_AND', 'BOOLAND_AGG'];
+  static readonly sqlNames: readonly string[] = ['LOGICAL_AND', 'BOOL_AND', 'BOOLAND_AGG'];
   override get key(): string { return 'logicaland'; }
   static readonly className: string = 'LogicalAnd';
 }
 
 export class Lower extends Func {
-  static readonly sqlNames = ['LOWER', 'LCASE'];
+  static readonly sqlNames: readonly string[] = ['LOWER', 'LCASE'];
   override get key(): string { return 'lower'; }
   static readonly className: string = 'Lower';
 }
@@ -4985,7 +4985,7 @@ export class Max extends AggFunc {
 }
 
 export class MD5 extends Func {
-  static readonly sqlNames = ['MD5'];
+  static readonly sqlNames: readonly string[] = ['MD5'];
   override get key(): string { return 'md5'; }
   static readonly className: string = 'MD5';
 }
@@ -4993,7 +4993,7 @@ export class MD5 extends Func {
 export class MD5Digest extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expressions': false };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['MD5_DIGEST'];
+  static readonly sqlNames: readonly string[] = ['MD5_DIGEST'];
   override get key(): string { return 'md5digest'; }
   static readonly className: string = 'MD5Digest';
 }
@@ -5138,7 +5138,7 @@ export class Pi extends Func {
 
 // Also extends: Func
 export class Pow extends Binary {
-  static readonly sqlNames = ['POWER', 'POW'];
+  static readonly sqlNames: readonly string[] = ['POWER', 'POW'];
   override get key(): string { return 'pow'; }
   static readonly className: string = 'Pow';
   override get name(): string {
@@ -5198,7 +5198,7 @@ export class Quarter extends Func {
 
 export class Rand extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': false, 'lower': false, 'upper': false };
-  static readonly sqlNames = ['RAND', 'RANDOM'];
+  static readonly sqlNames: readonly string[] = ['RAND', 'RANDOM'];
   override get key(): string { return 'rand'; }
   static readonly className: string = 'Rand';
 }
@@ -5237,7 +5237,7 @@ export class Rank extends AggFunc {
 export class ReadCSV extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expressions': false };
   static readonly isVarLenArgs = true;
-  static readonly sqlNames = ['READ_CSV'];
+  static readonly sqlNames: readonly string[] = ['READ_CSV'];
   override get key(): string { return 'readcsv'; }
   static readonly className: string = 'ReadCSV';
 }
@@ -5484,14 +5484,14 @@ export class SafeConvertBytesToString extends Func {
 }
 
 export class SHA extends Func {
-  static readonly sqlNames = ['SHA', 'SHA1'];
+  static readonly sqlNames: readonly string[] = ['SHA', 'SHA1'];
   override get key(): string { return 'sha'; }
   static readonly className: string = 'SHA';
 }
 
 export class SHA2 extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'length': false };
-  static readonly sqlNames = ['SHA2'];
+  static readonly sqlNames: readonly string[] = ['SHA2'];
   override get key(): string { return 'sha2'; }
   static readonly className: string = 'SHA2';
 }
@@ -5508,7 +5508,7 @@ export class SHA2Digest extends Func {
 }
 
 export class Sign extends Func {
-  static readonly sqlNames = ['SIGN', 'SIGNUM'];
+  static readonly sqlNames: readonly string[] = ['SIGN', 'SIGNUM'];
   override get key(): string { return 'sign'; }
   static readonly className: string = 'Sign';
 }
@@ -5543,7 +5543,7 @@ export class SplitPart extends Func {
 
 export class Substring extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'start': false, 'length': false };
-  static readonly sqlNames = ['SUBSTRING', 'SUBSTR'];
+  static readonly sqlNames: readonly string[] = ['SUBSTRING', 'SUBSTR'];
   override get key(): string { return 'substring'; }
   static readonly className: string = 'Substring';
 }
@@ -5562,14 +5562,14 @@ export class StandardHash extends Func {
 
 export class StartsWith extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true };
-  static readonly sqlNames = ['STARTS_WITH', 'STARTSWITH'];
+  static readonly sqlNames: readonly string[] = ['STARTS_WITH', 'STARTSWITH'];
   override get key(): string { return 'startswith'; }
   static readonly className: string = 'StartsWith';
 }
 
 export class EndsWith extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true };
-  static readonly sqlNames = ['ENDS_WITH', 'ENDSWITH'];
+  static readonly sqlNames: readonly string[] = ['ENDS_WITH', 'ENDSWITH'];
   override get key(): string { return 'endswith'; }
   static readonly className: string = 'EndsWith';
 }
@@ -5648,7 +5648,7 @@ export class StructExtract extends Func {
 
 export class Stuff extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'start': true, 'length': true, 'expression': true };
-  static readonly sqlNames = ['STUFF', 'INSERT'];
+  static readonly sqlNames: readonly string[] = ['STUFF', 'INSERT'];
   override get key(): string { return 'stuff'; }
   static readonly className: string = 'Stuff';
 }
@@ -5664,7 +5664,7 @@ export class Sqrt extends Func {
 }
 
 export class Stddev extends AggFunc {
-  static readonly sqlNames = ['STDDEV', 'STDEV'];
+  static readonly sqlNames: readonly string[] = ['STDDEV', 'STDEV'];
   override get key(): string { return 'stddev'; }
   static readonly className: string = 'Stddev';
 }
@@ -5825,34 +5825,34 @@ export class UnixMillis extends Func {
 
 export class Uuid extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': false, 'name': false, 'is_string': false };
-  static readonly sqlNames = ['UUID', 'GEN_RANDOM_UUID', 'GENERATE_UUID', 'UUID_STRING'];
+  static readonly sqlNames: readonly string[] = ['UUID', 'GEN_RANDOM_UUID', 'GENERATE_UUID', 'UUID_STRING'];
   override get key(): string { return 'uuid'; }
   static readonly className: string = 'Uuid';
 }
 
 export class TimestampFromParts extends Func {
   static readonly argTypes: Record<string, boolean> = { 'year': false, 'month': false, 'day': false, 'hour': false, 'min': false, 'sec': false, 'nano': false, 'zone': false, 'milli': false, 'this': false, 'expression': false };
-  static readonly sqlNames = ['TIMESTAMP_FROM_PARTS', 'TIMESTAMPFROMPARTS'];
+  static readonly sqlNames: readonly string[] = ['TIMESTAMP_FROM_PARTS', 'TIMESTAMPFROMPARTS'];
   override get key(): string { return 'timestampfromparts'; }
   static readonly className: string = 'TimestampFromParts';
 }
 
 export class TimestampLtzFromParts extends Func {
   static readonly argTypes: Record<string, boolean> = { 'year': false, 'month': false, 'day': false, 'hour': false, 'min': false, 'sec': false, 'nano': false };
-  static readonly sqlNames = ['TIMESTAMP_LTZ_FROM_PARTS', 'TIMESTAMPLTZFROMPARTS'];
+  static readonly sqlNames: readonly string[] = ['TIMESTAMP_LTZ_FROM_PARTS', 'TIMESTAMPLTZFROMPARTS'];
   override get key(): string { return 'timestampltzfromparts'; }
   static readonly className: string = 'TimestampLtzFromParts';
 }
 
 export class TimestampTzFromParts extends Func {
   static readonly argTypes: Record<string, boolean> = { 'year': false, 'month': false, 'day': false, 'hour': false, 'min': false, 'sec': false, 'nano': false, 'zone': false };
-  static readonly sqlNames = ['TIMESTAMP_TZ_FROM_PARTS', 'TIMESTAMPTZFROMPARTS'];
+  static readonly sqlNames: readonly string[] = ['TIMESTAMP_TZ_FROM_PARTS', 'TIMESTAMPTZFROMPARTS'];
   override get key(): string { return 'timestamptzfromparts'; }
   static readonly className: string = 'TimestampTzFromParts';
 }
 
 export class Upper extends Func {
-  static readonly sqlNames = ['UPPER', 'UCASE'];
+  static readonly sqlNames: readonly string[] = ['UPPER', 'UCASE'];
   override get key(): string { return 'upper'; }
   static readonly className: string = 'Upper';
 }
@@ -5878,13 +5878,13 @@ export class CumeDist extends AggFunc {
 }
 
 export class Variance extends AggFunc {
-  static readonly sqlNames = ['VARIANCE', 'VARIANCE_SAMP', 'VAR_SAMP'];
+  static readonly sqlNames: readonly string[] = ['VARIANCE', 'VARIANCE_SAMP', 'VAR_SAMP'];
   override get key(): string { return 'variance'; }
   static readonly className: string = 'Variance';
 }
 
 export class VariancePop extends AggFunc {
-  static readonly sqlNames = ['VARIANCE_POP', 'VAR_POP'];
+  static readonly sqlNames: readonly string[] = ['VARIANCE_POP', 'VAR_POP'];
   override get key(): string { return 'variancepop'; }
   static readonly className: string = 'VariancePop';
 }
@@ -5936,14 +5936,14 @@ export class NextDay extends Func {
 
 export class XMLElement extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expressions': false, 'evalname': false };
-  static readonly sqlNames = ['XMLELEMENT'];
+  static readonly sqlNames: readonly string[] = ['XMLELEMENT'];
   override get key(): string { return 'xmlelement'; }
   static readonly className: string = 'XMLElement';
 }
 
 export class XMLGet extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expression': true, 'instance': false };
-  static readonly sqlNames = ['XMLGET'];
+  static readonly sqlNames: readonly string[] = ['XMLGET'];
   override get key(): string { return 'xmlget'; }
   static readonly className: string = 'XMLGet';
 }
@@ -6022,7 +6022,9 @@ export class Variadic extends Expression {
   static readonly className: string = 'Variadic';
 }
 
-export const GENERATED_CLASSES = [
+type NamedExpressionClass = ExpressionClass & { readonly className: string };
+
+export const GENERATED_CLASSES: readonly NamedExpressionClass[] = [
   Condition,
   Predicate,
   DerivedTable,
@@ -6985,7 +6987,7 @@ export const GENERATED_CLASSES = [
   Semicolon,
   TableColumn,
   Variadic,
-] as const;
+];
 
 export const MULTI_INHERITANCE_MAP: Record<string, readonly string[]> = {
   'AggFunc': ['Corr'],

@@ -268,21 +268,24 @@ export abstract class Expression {
   }
 
   get depth(): number {
-    let d = 0
-    let node: Expression | undefined = this
-    while (node.parent) {
-      d++
-      node = node.parent
+    let depth = 0
+    let parent = this.parent
+    while (parent) {
+      depth++
+      parent = parent.parent
     }
-    return d
+    return depth
   }
 
   root(): Expression {
-    let root: Expression = this
-    while (root.parent) {
-      root = root.parent
+    let parent = this.parent
+    if (!parent) {
+      return this
     }
-    return root
+    while (parent.parent) {
+      parent = parent.parent
+    }
+    return parent
   }
 
   set(argKey: string, value: ArgValue, index?: number, overwrite = true): void {
@@ -406,16 +409,24 @@ export abstract class Expression {
   }
 
   unnest(): Expression {
-    let expression: Expression = this
-    while (expression.key === "paren") {
-      const inner = expression.args.this
-      if (inner instanceof Expression) {
-        expression = inner
-      } else {
-        break
-      }
+    if (this.key !== "paren") {
+      return this
     }
-    return expression
+
+    let inner = this.args.this
+    if (!(inner instanceof Expression)) {
+      return this
+    }
+
+    while (inner.key === "paren") {
+      const nextInner: ArgValue = inner.args.this
+      if (!(nextInner instanceof Expression)) {
+        return inner
+      }
+      inner = nextInner
+    }
+
+    return inner
   }
 
   unalias(): Expression {

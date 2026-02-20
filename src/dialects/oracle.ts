@@ -56,8 +56,9 @@ export class OracleDialect extends Dialect {
     | "nulls_are_small"
     | "nulls_are_large"
     | "nulls_are_last" = "nulls_are_large"
-  protected static override ParserClass = OracleParser
-  protected static override GeneratorClass = OracleGenerator
+  protected static override ParserClass: typeof OracleParser = OracleParser
+  protected static override GeneratorClass: typeof OracleGenerator =
+    OracleGenerator
 
   override createTokenizer(): Tokenizer {
     return new Tokenizer({

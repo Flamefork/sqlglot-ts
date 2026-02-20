@@ -44,8 +44,9 @@ export class TrinoDialect extends Dialect {
     | "nulls_are_large"
     | "nulls_are_last" = "nulls_are_last"
   static override INDEX_OFFSET = 1
-  protected static override ParserClass = TrinoParser
-  protected static override GeneratorClass = TrinoGenerator
+  protected static override ParserClass: typeof TrinoParser = TrinoParser
+  protected static override GeneratorClass: typeof TrinoGenerator =
+    TrinoGenerator
 }
 
 Dialect.register(TrinoDialect)

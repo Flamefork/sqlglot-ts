@@ -12,8 +12,9 @@ export class DuneDialect extends Dialect {
     | "nulls_are_large"
     | "nulls_are_last" = "nulls_are_last"
   static override INDEX_OFFSET = 1
-  protected static override ParserClass = PrestoParser
-  protected static override GeneratorClass = PrestoGenerator
+  protected static override ParserClass: typeof PrestoParser = PrestoParser
+  protected static override GeneratorClass: typeof PrestoGenerator =
+    PrestoGenerator
 }
 
 // Register dialect

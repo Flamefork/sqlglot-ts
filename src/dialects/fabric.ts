@@ -8,8 +8,8 @@ import { TSQLGenerator, TSQLParser } from "./tsql.js"
 export class FabricDialect extends Dialect {
   static override readonly name = "fabric"
   static override CONCAT_COALESCE = true
-  protected static override ParserClass = TSQLParser
-  protected static override GeneratorClass = TSQLGenerator
+  protected static override ParserClass: typeof TSQLParser = TSQLParser
+  protected static override GeneratorClass: typeof TSQLGenerator = TSQLGenerator
 }
 
 // Register dialect

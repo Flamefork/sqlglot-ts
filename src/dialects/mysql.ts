@@ -10,7 +10,7 @@ import {
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
-import { Parser } from "../parser.js"
+import { FunctionBuilder, Parser } from "../parser.js"
 import { TokenType } from "../tokens.js"
 import {
   datestrtodate_sql,
@@ -28,7 +28,7 @@ export class MySQLParser extends Parser {
     [TokenType.XOR, exp.Xor],
   ])
 
-  static override FUNCTIONS = new Map([
+  static override FUNCTIONS: Map<string, FunctionBuilder> = new Map([
     ...Parser.FUNCTIONS,
     [
       "FORMAT",
@@ -48,10 +48,9 @@ export class MySQLGenerator extends Generator {
   static override HEX_START: string | null = "x'"
   static override HEX_END: string | null = "'"
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    buildUnescapedSequences(),
-  )
-  static override STRING_ESCAPES = ["'", '"', "\\"]
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(buildUnescapedSequences())
+  static override STRING_ESCAPES: string[] = ["'", '"', "\\"]
 
   static CHAR_CAST_MAPPING: Record<string, string> = {
     LONGTEXT: "CHAR",
@@ -73,7 +72,46 @@ export class MySQLGenerator extends Generator {
     MEDIUMINT: "SIGNED",
   }
 
-  static override FEATURES = {
+  static override FEATURES: {
+    INTERVAL_ALLOWS_PLURAL_FORM: boolean
+    NULL_ORDERING_SUPPORTED: boolean | null
+    CONCAT_COALESCE: boolean
+    SAFE_DIVISION: boolean
+    LOCKING_READS_SUPPORTED: boolean
+    LIMIT_FETCH: "ALL" | "LIMIT" | "FETCH"
+    LIMIT_IS_TOP: boolean
+    EXTRACT_ALLOWS_QUOTES: boolean
+    IGNORE_NULLS_IN_FUNC: boolean
+    NVL2_SUPPORTED: boolean
+    SUPPORTS_SINGLE_ARG_CONCAT: boolean
+    LAST_DAY_SUPPORTS_DATE_PART: boolean
+    COLLATE_IS_FUNC: boolean
+    EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE: boolean
+    WRAP_DERIVED_VALUES: boolean
+    VALUES_AS_TABLE: boolean
+    SINGLE_STRING_INTERVAL: boolean
+    RENAME_TABLE_WITH_DB: boolean
+    ALTER_TABLE_INCLUDE_COLUMN_KEYWORD: boolean
+    ALTER_TABLE_ADD_REQUIRED_FOR_EACH_COLUMN: boolean
+    ALTER_TABLE_SUPPORTS_CASCADE: boolean
+    SUPPORTS_TABLE_COPY: boolean
+    SUPPORTS_TABLE_ALIAS_COLUMNS: boolean
+    JOIN_HINTS: boolean
+    TABLE_HINTS: boolean
+    QUERY_HINTS: boolean
+    IS_BOOL_ALLOWED: boolean
+    ENSURE_BOOLS: boolean
+    TZ_TO_WITH_TIME_ZONE: boolean
+    UNNEST_WITH_ORDINALITY: boolean
+    AGGREGATE_FILTER_SUPPORTED: boolean
+    SEMI_ANTI_JOIN_WITH_SIDE: boolean
+    TABLESAMPLE_REQUIRES_PARENS: boolean
+    CTE_RECURSIVE_KEYWORD_REQUIRED: boolean
+    UNPIVOT_ALIASES_ARE_IDENTIFIERS: boolean
+    SUPPORTS_SELECT_INTO: boolean
+    STAR_EXCEPT: "EXCEPT" | "EXCLUDE" | null
+    TYPED_DIVISION: boolean
+  } = {
     ...Generator.FEATURES,
     INTERVAL_ALLOWS_PLURAL_FORM: false,
     NULL_ORDERING_SUPPORTED: null as boolean | null,
@@ -290,7 +328,10 @@ export class MySQLGenerator extends Generator {
     UBIGINT: "UNSIGNED",
   }
 
-  static TIMESTAMP_FUNC_TYPES = new Set(["TIMESTAMPTZ", "TIMESTAMPLTZ"])
+  static TIMESTAMP_FUNC_TYPES: Set<string> = new Set([
+    "TIMESTAMPTZ",
+    "TIMESTAMPLTZ",
+  ])
 
   protected override shouldQuote(name: string): boolean {
     if (name.toUpperCase() === "STRAIGHT_JOIN") return true
@@ -363,14 +404,15 @@ export class MySQLDialect extends Dialect {
   static override BIT_END = "'"
   static override HEX_START = "x'"
   static override HEX_END = "'"
-  static override STRING_ESCAPES = ["'", '"', "\\"]
-  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
-  static override ESCAPED_SEQUENCES = buildEscapedSequences(
-    MySQLDialect.UNESCAPED_SEQUENCES,
-  )
+  static override STRING_ESCAPES: string[] = ["'", '"', "\\"]
+  static override UNESCAPED_SEQUENCES: Record<string, string> =
+    buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES: Record<string, string> =
+    buildEscapedSequences(MySQLDialect.UNESCAPED_SEQUENCES)
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
-  protected static override ParserClass = MySQLParser
-  protected static override GeneratorClass = MySQLGenerator
+  protected static override ParserClass: typeof MySQLParser = MySQLParser
+  protected static override GeneratorClass: typeof MySQLGenerator =
+    MySQLGenerator
 
   constructor(options: any = {}) {
     super({

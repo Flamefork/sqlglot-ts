@@ -6,7 +6,7 @@ import { Dialect } from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
-import { Parser } from "../parser.js"
+import { FunctionBuilder, Parser } from "../parser.js"
 import { renameFunc } from "../transforms.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
@@ -21,7 +21,7 @@ function sha2Sql(gen: Generator, e: exp.Expression): string {
 }
 
 export class ExasolParser extends Parser {
-  static override FUNCTIONS = new Map([
+  static override FUNCTIONS: Map<string, FunctionBuilder> = new Map([
     ...Parser.FUNCTIONS,
     [
       "BIT_AND",
@@ -124,8 +124,9 @@ export class ExasolGenerator extends Generator {
 
 export class ExasolDialect extends Dialect {
   static override readonly name = "exasol"
-  protected static override ParserClass = ExasolParser
-  protected static override GeneratorClass = ExasolGenerator
+  protected static override ParserClass: typeof ExasolParser = ExasolParser
+  protected static override GeneratorClass: typeof ExasolGenerator =
+    ExasolGenerator
 }
 
 // Register dialect

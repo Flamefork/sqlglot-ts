@@ -6,14 +6,14 @@ import { Dialect } from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import type { Generator } from "../generator.js"
-import { Parser } from "../parser.js"
+import { FunctionBuilder, Parser } from "../parser.js"
 import { renameFunc } from "../transforms.js"
 import { MySQLGenerator } from "./mysql.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
 
 export class SingleStoreParser extends Parser {
-  static override FUNCTIONS = new Map([
+  static override FUNCTIONS: Map<string, FunctionBuilder> = new Map([
     ...Parser.FUNCTIONS,
     [
       "UNIX_TIMESTAMP",
@@ -58,8 +58,10 @@ export class SingleStoreGenerator extends MySQLGenerator {
 export class SingleStoreDialect extends Dialect {
   static override readonly name = "singlestore"
   static override CONCAT_COALESCE = true
-  protected static override ParserClass = SingleStoreParser
-  protected static override GeneratorClass = SingleStoreGenerator
+  protected static override ParserClass: typeof SingleStoreParser =
+    SingleStoreParser
+  protected static override GeneratorClass: typeof SingleStoreGenerator =
+    SingleStoreGenerator
 }
 
 // Register dialect

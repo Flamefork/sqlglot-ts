@@ -443,7 +443,10 @@ export class DuckDBParser extends Parser {
     ["STRINGAGG", (p) => (p as DuckDBParser).parseStringAgg()],
   ])
 
-  static override SET_PARSERS = new Map([
+  static override SET_PARSERS: Map<
+    string,
+    (parser: Parser) => exp.Expression | undefined
+  > = new Map([
     ...Parser.SET_PARSERS,
     ["VARIABLE", (p: Parser) => p.parseSetItemAssignment("VARIABLE")],
   ])
@@ -1231,7 +1234,46 @@ export class DuckDBGenerator extends Generator {
   ])
 
   // Override features for DuckDB
-  static override FEATURES = {
+  static override FEATURES: {
+    IGNORE_NULLS_IN_FUNC: boolean
+    JOIN_HINTS: boolean
+    TABLE_HINTS: boolean
+    QUERY_HINTS: boolean
+    LIMIT_FETCH: "LIMIT"
+    RENAME_TABLE_WITH_DB: boolean
+    NVL2_SUPPORTED: boolean
+    SEMI_ANTI_JOIN_WITH_SIDE: boolean
+    LAST_DAY_SUPPORTS_DATE_PART: boolean
+    STAR_EXCEPT: "EXCLUDE"
+    CONCAT_COALESCE: boolean
+    SAFE_DIVISION: boolean
+    NULL_ORDERING_SUPPORTED: boolean | null
+    LOCKING_READS_SUPPORTED: boolean
+    LIMIT_IS_TOP: boolean
+    EXTRACT_ALLOWS_QUOTES: boolean
+    SUPPORTS_SINGLE_ARG_CONCAT: boolean
+    COLLATE_IS_FUNC: boolean
+    EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE: boolean
+    WRAP_DERIVED_VALUES: boolean
+    VALUES_AS_TABLE: boolean
+    SINGLE_STRING_INTERVAL: boolean
+    INTERVAL_ALLOWS_PLURAL_FORM: boolean
+    ALTER_TABLE_INCLUDE_COLUMN_KEYWORD: boolean
+    ALTER_TABLE_ADD_REQUIRED_FOR_EACH_COLUMN: boolean
+    ALTER_TABLE_SUPPORTS_CASCADE: boolean
+    SUPPORTS_TABLE_COPY: boolean
+    SUPPORTS_TABLE_ALIAS_COLUMNS: boolean
+    IS_BOOL_ALLOWED: boolean
+    ENSURE_BOOLS: boolean
+    TZ_TO_WITH_TIME_ZONE: boolean
+    UNNEST_WITH_ORDINALITY: boolean
+    AGGREGATE_FILTER_SUPPORTED: boolean
+    TABLESAMPLE_REQUIRES_PARENS: boolean
+    CTE_RECURSIVE_KEYWORD_REQUIRED: boolean
+    UNPIVOT_ALIASES_ARE_IDENTIFIERS: boolean
+    SUPPORTS_SELECT_INTO: boolean
+    TYPED_DIVISION: boolean
+  } = {
     ...Generator.FEATURES,
     IGNORE_NULLS_IN_FUNC: true,
     JOIN_HINTS: false,
@@ -2743,8 +2785,9 @@ export class DuckDBDialect extends Dialect {
   static override SAFE_DIVISION = true
   static override BYTE_START: string | null = "e'"
   static override BYTE_END: string | null = "'"
-  protected static override ParserClass = DuckDBParser
-  protected static override GeneratorClass = DuckDBGenerator
+  protected static override ParserClass: typeof DuckDBParser = DuckDBParser
+  protected static override GeneratorClass: typeof DuckDBGenerator =
+    DuckDBGenerator
 
   override createTokenizer(): Tokenizer {
     return new Tokenizer({
