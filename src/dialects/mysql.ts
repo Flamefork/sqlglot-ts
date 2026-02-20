@@ -2,7 +2,11 @@
  * MySQL dialect
  */
 
-import { Dialect } from "../dialect.js"
+import {
+  Dialect,
+  buildEscapedSequences,
+  buildUnescapedSequences,
+} from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
@@ -43,6 +47,11 @@ export class MySQLGenerator extends Generator {
   static override BIT_END: string | null = "'"
   static override HEX_START: string | null = "x'"
   static override HEX_END: string | null = "'"
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    buildUnescapedSequences(),
+  )
+  static override STRING_ESCAPES = ["'", '"', "\\"]
 
   static CHAR_CAST_MAPPING: Record<string, string> = {
     LONGTEXT: "CHAR",
@@ -354,6 +363,12 @@ export class MySQLDialect extends Dialect {
   static override BIT_END = "'"
   static override HEX_START = "x'"
   static override HEX_END = "'"
+  static override STRING_ESCAPES = ["'", '"', "\\"]
+  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    MySQLDialect.UNESCAPED_SEQUENCES,
+  )
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
   protected static override ParserClass = MySQLParser
   protected static override GeneratorClass = MySQLGenerator
 

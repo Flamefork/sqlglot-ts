@@ -19,6 +19,35 @@ export interface DialectOptions {
 // Registry of dialects
 const DIALECTS: Map<string, Dialect> = new Map()
 
+const DEFAULT_UNESCAPED_SEQUENCES: Record<string, string> = {
+  "\\a": "\x07",
+  "\\b": "\b",
+  "\\f": "\f",
+  "\\n": "\n",
+  "\\r": "\r",
+  "\\t": "\t",
+  "\\v": "\v",
+  "\\\\": "\\",
+}
+
+export function buildUnescapedSequences(
+  extra?: Record<string, string>,
+): Record<string, string> {
+  return extra
+    ? { ...DEFAULT_UNESCAPED_SEQUENCES, ...extra }
+    : { ...DEFAULT_UNESCAPED_SEQUENCES }
+}
+
+export function buildEscapedSequences(
+  unescaped: Record<string, string>,
+): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const [k, v] of Object.entries(unescaped)) {
+    result[v] = k
+  }
+  return result
+}
+
 export class Dialect {
   static readonly name: string = "sqlglot"
 
@@ -44,6 +73,12 @@ export class Dialect {
   static PRESERVE_ORIGINAL_NAMES = false
   static TYPED_DIVISION = false
   static SAFE_DIVISION = false
+
+  // String escape configuration
+  static STRING_ESCAPES: string[] = ["'"]
+  static UNESCAPED_SEQUENCES: Record<string, string> = {}
+  static ESCAPED_SEQUENCES: Record<string, string> = {}
+  static STRINGS_SUPPORT_ESCAPED_SEQUENCES = false
 
   // String literal delimiters (extracted from tokenizer config)
   static BIT_START: string | null = null
@@ -208,6 +243,19 @@ export class Dialect {
     return (this.constructor as typeof Dialect).BYTE_END
   }
 
+  get STRINGS_SUPPORT_ESCAPED_SEQUENCES(): boolean {
+    return (this.constructor as typeof Dialect)
+      .STRINGS_SUPPORT_ESCAPED_SEQUENCES
+  }
+
+  get ESCAPED_SEQUENCES(): Record<string, string> {
+    return (this.constructor as typeof Dialect).ESCAPED_SEQUENCES
+  }
+
+  get STRING_ESCAPES(): string[] {
+    return (this.constructor as typeof Dialect).STRING_ESCAPES
+  }
+
   get TIME_MAPPING(): Map<string, string> {
     return (this.constructor as typeof Dialect).TIME_MAPPING
   }
@@ -228,7 +276,12 @@ export class Dialect {
   }
 
   createTokenizer(): Tokenizer {
-    return new this.TokenizerClass(this.options.tokenizer)
+    const cls = this.constructor as typeof Dialect
+    return new this.TokenizerClass({
+      ...this.options.tokenizer,
+      stringEscapes: cls.STRING_ESCAPES,
+      unescapedSequences: cls.UNESCAPED_SEQUENCES,
+    })
   }
 
   createParser(): Parser {

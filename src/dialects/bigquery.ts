@@ -2,7 +2,11 @@
  * BigQuery dialect
  */
 
-import { Dialect } from "../dialect.js"
+import {
+  Dialect,
+  buildEscapedSequences,
+  buildUnescapedSequences,
+} from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
@@ -17,28 +21,12 @@ import {
   preprocess,
   regexpReplaceSql,
   removePrecisionParameterizedTypes,
+  renameFunc,
   timestrtotime_sql,
   unqualifyUnnest,
 } from "../transforms.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
-
-function renameFunc(name: string): Transform {
-  return (gen: Generator, e: exp.Expression) => {
-    const expr = e as exp.Func
-    const args: exp.Expression[] = []
-    const thisArg = expr.args.this
-    if (thisArg instanceof exp.Expression) {
-      args.push(thisArg)
-    }
-    const expressionArg = expr.args.expression
-    if (expressionArg instanceof exp.Expression) {
-      args.push(expressionArg)
-    }
-    args.push(...expr.expressions)
-    return gen.funcCall(name, args)
-  }
-}
 
 function bqJsonExtractSql(gen: Generator, e: exp.Expression): string {
   const name =
@@ -318,6 +306,11 @@ export class BigQueryGenerator extends Generator {
   static override BYTE_START: string | null = "b'"
   static override BYTE_END: string | null = "'"
   static override BYTE_STRING_IS_BYTES_TYPE = true
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    buildUnescapedSequences(),
+  )
+  static override STRING_ESCAPES = ["\\"]
 
   static override FEATURES = {
     ...Generator.FEATURES,
@@ -795,6 +788,12 @@ export class BigQueryDialect extends Dialect {
   static override BYTE_START: string | null = "b'"
   static override BYTE_END: string | null = "'"
   static override PRESERVE_ORIGINAL_NAMES = true
+  static override STRING_ESCAPES = ["\\"]
+  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    BigQueryDialect.UNESCAPED_SEQUENCES,
+  )
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
   protected static override ParserClass = BigQueryParser
   protected static override GeneratorClass = BigQueryGenerator
 

@@ -2,7 +2,11 @@
  * ClickHouse dialect
  */
 
-import { Dialect } from "../dialect.js"
+import {
+  Dialect,
+  buildEscapedSequences,
+  buildUnescapedSequences,
+} from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
@@ -72,6 +76,11 @@ export class ClickHouseGenerator extends Generator {
   static override HEX_START: string | null = "0x"
   static override HEX_END: string | null = ""
   static override HEX_STRING_IS_INTEGER_TYPE = true
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    buildUnescapedSequences({ "\\0": "\0" }),
+  )
+  static override STRING_ESCAPES = ["'", "\\"]
 
   static override NULL_ORDERING:
     | "nulls_are_small"
@@ -418,6 +427,12 @@ export class ClickHouseDialect extends Dialect {
   static override BIT_END = ""
   static override HEX_START = "0x"
   static override HEX_END = ""
+  static override STRING_ESCAPES = ["'", "\\"]
+  static override UNESCAPED_SEQUENCES = buildUnescapedSequences({ "\\0": "\0" })
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    ClickHouseDialect.UNESCAPED_SEQUENCES,
+  )
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
   protected static override ParserClass = ClickHouseParser
   protected static override GeneratorClass = ClickHouseGenerator
 }

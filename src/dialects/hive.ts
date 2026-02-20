@@ -2,7 +2,11 @@
  * Apache Hive SQL dialect
  */
 
-import { Dialect } from "../dialect.js"
+import {
+  Dialect,
+  buildEscapedSequences,
+  buildUnescapedSequences,
+} from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
@@ -15,6 +19,7 @@ import {
   eliminateQualify,
   preprocess,
   regexpReplaceSql,
+  renameFunc,
   sequenceSql,
   timestrtotime_sql,
   unitToStr,
@@ -23,19 +28,6 @@ import {
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
 type FunctionBuilder = (args: exp.Expression[]) => exp.Expression
-
-function renameFunc(name: string): Transform {
-  return (gen: Generator, e: exp.Expression) => {
-    const expr = e as exp.Func
-    const args: exp.Expression[] = []
-    const thisArg = expr.args.this
-    if (thisArg instanceof exp.Expression) {
-      args.push(thisArg)
-    }
-    args.push(...expr.expressions)
-    return gen.funcCall(name, args)
-  }
-}
 
 const NUMERIC_LITERALS: Map<string, string> = new Map([
   ["D", "DOUBLE"],
@@ -285,6 +277,12 @@ export class HiveParser extends Parser {
 export class HiveGenerator extends Generator {
   protected override ARRAY_SIZE_NAME = "SIZE"
   protected override ALTER_SET_TYPE = ""
+
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    buildUnescapedSequences(),
+  )
+  static override STRING_ESCAPES = ["\\"]
 
   static override FEATURES = {
     ...Generator.FEATURES,
@@ -552,6 +550,12 @@ export class HiveDialect extends Dialect {
   static override readonly name = "hive"
   static override SAFE_DIVISION = true
   static override TIME_MAPPING = HIVE_TIME_MAPPING
+  static override STRING_ESCAPES = ["\\"]
+  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    HiveDialect.UNESCAPED_SEQUENCES,
+  )
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
   protected static override ParserClass = HiveParser
   protected static override GeneratorClass = HiveGenerator
 

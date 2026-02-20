@@ -2,7 +2,11 @@
  * Apache Spark SQL dialect
  */
 
-import { Dialect } from "../dialect.js"
+import {
+  Dialect,
+  buildEscapedSequences,
+  buildUnescapedSequences,
+} from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import type { Generator } from "../generator.js"
@@ -11,6 +15,7 @@ import {
   eliminateDistinctOn,
   eliminateQualify,
   preprocess,
+  renameFunc,
   sequenceSql,
   timestamptrunc_sql,
   unitToVar,
@@ -19,17 +24,6 @@ import {
 import { HiveGenerator, HiveParser } from "./hive.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
-
-function renameFunc(name: string): Transform {
-  return (gen: Generator, e: exp.Expression) => {
-    const expr = e as exp.Func
-    const args: exp.Expression[] = []
-    const thisArg = expr.args.this
-    if (thisArg instanceof exp.Expression) args.push(thisArg)
-    args.push(...expr.expressions)
-    return gen.funcCall(name, args)
-  }
-}
 
 export class SparkParser extends HiveParser {
   static override FUNCTIONS = new Map([
@@ -367,6 +361,12 @@ export class SparkGenerator extends Spark2Generator {
 export class SparkDialect extends Dialect {
   static override readonly name = "spark"
   static override SAFE_DIVISION = true
+  static override STRING_ESCAPES = ["\\"]
+  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    SparkDialect.UNESCAPED_SEQUENCES,
+  )
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
   protected static override ParserClass = SparkParser
   protected static override GeneratorClass = SparkGenerator
 }
@@ -377,6 +377,12 @@ Dialect.register(SparkDialect)
 export class Spark2Dialect extends Dialect {
   static override readonly name = "spark2"
   static override SAFE_DIVISION = true
+  static override STRING_ESCAPES = ["\\"]
+  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    Spark2Dialect.UNESCAPED_SEQUENCES,
+  )
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
   protected static override ParserClass = SparkParser
   protected static override GeneratorClass = Spark2Generator
 }

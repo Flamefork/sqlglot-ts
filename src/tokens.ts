@@ -593,6 +593,8 @@ export interface TokenizerOptions {
   numbersCanBeUnderscoreSeparated?: boolean
   bitStrings?: Array<[string, string]> // e.g., [["b'", "'"], ["0b", ""]]
   hexStrings?: Array<[string, string]> // e.g., [["x'", "'"], ["0x", ""]]
+  stringEscapes?: string[] // e.g., ["'"] for base, ["\\"] for Hive
+  unescapedSequences?: Record<string, string> // e.g., {"\\n": "\n", ...}
 }
 
 export class Tokenizer {
@@ -611,6 +613,8 @@ export class Tokenizer {
   private formatStrings: Map<string, [string, TokenType]> // prefix -> [end_quote, token_type]
   private hasBitStrings: boolean
   private hasHexStrings: boolean
+  private stringEscapes: Set<string>
+  private unescapedSequences: Record<string, string>
 
   constructor(options: TokenizerOptions = {}) {
     this.keywords = new Map(KEYWORDS)
@@ -657,6 +661,8 @@ export class Tokenizer {
 
     this.hasBitStrings = (options.bitStrings?.length ?? 0) > 0
     this.hasHexStrings = (options.hexStrings?.length ?? 0) > 0
+    this.stringEscapes = new Set(options.stringEscapes ?? ["'"])
+    this.unescapedSequences = options.unescapedSequences ?? {}
   }
 
   tokenize(sql: string): Token[] {
@@ -1083,37 +1089,56 @@ export class Tokenizer {
     const start = this.pos
     this.advance() // Opening quote
 
-    const contentStart = this.pos
-    const actualEndQuote = endQuote ?? quote
+    const delimiter = endQuote ?? quote
+    const escapes = this.stringEscapes
+    const hasUnescapedSeqs = Object.keys(this.unescapedSequences).length > 0
+    let text = ""
 
     while (this.pos < this.sql.length) {
-      if (this.current === actualEndQuote) {
-        if (this.peek === actualEndQuote) {
-          // Escaped quote - skip both
+      // Check UNESCAPED_SEQUENCES first (e.g., \n → newline)
+      if (hasUnescapedSeqs && escapes.has(this.current) && this.peek) {
+        const seq = this.current + this.peek
+        const unescaped = this.unescapedSequences[seq]
+        if (unescaped !== undefined) {
+          text += unescaped
           this.advance()
           this.advance()
-        } else {
-          break
+          continue
         }
-      } else if (this.current === "\\") {
-        // Escape sequence - skip both characters
-        this.advance()
-        this.advance()
-      } else {
-        this.advance()
       }
+
+      // Escape char handling: escape + delimiter → delimiter char
+      if (
+        escapes.has(this.current) &&
+        (this.peek === delimiter || escapes.has(this.peek))
+      ) {
+        if (this.current === this.peek && this.quoteChars.has(this.current)) {
+          // Quote doubling (e.g., '' → ')
+          text += this.current
+        } else if (this.peek === delimiter) {
+          // Escape + delimiter (e.g., \' → ')
+          text += this.peek
+        } else {
+          // Escape + escape (e.g., \\ when not in UNESCAPED_SEQUENCES)
+          text += this.current + this.peek
+        }
+        this.advance()
+        this.advance()
+        continue
+      }
+
+      // Check for delimiter (end of string)
+      if (this.current === delimiter) {
+        break
+      }
+
+      // Regular character
+      text += this.current
+      this.advance()
     }
 
-    if (this.current !== actualEndQuote) {
+    if (this.current !== delimiter) {
       throw new Error(`Unterminated string at line ${this.line}`)
-    }
-
-    // For STRING tokens, include quotes. For format strings, extract content only.
-    let text: string
-    if (tokenType === TokenType.STRING) {
-      text = this.sql.slice(start, this.pos + 1) // include closing quote
-    } else {
-      text = this.sql.slice(contentStart, this.pos) // content only
     }
 
     this.advance() // Closing quote
@@ -1470,8 +1495,8 @@ export class Tokenizer {
       this.advance()
     }
 
-    // Store as single-quoted string so parser handles it like a regular string
-    this.addToken(TokenType.STRING, `'${content}'`, start)
+    // Store inner content only (no quotes) - generator will add them
+    this.addToken(TokenType.STRING, content, start)
   }
 
   private isDigit(ch: string): boolean {

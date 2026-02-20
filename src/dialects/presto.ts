@@ -18,6 +18,7 @@ import {
   explodeProjectionToUnnest,
   preprocess,
   removePrecisionParameterizedTypes,
+  renameFunc,
   sequenceSql,
   timestrtotime_sql,
   tsOrDsAddCast,
@@ -25,19 +26,6 @@ import {
 } from "../transforms.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
-
-function renameFunc(name: string): Transform {
-  return (gen: Generator, e: exp.Expression) => {
-    const expr = e as exp.Func
-    const args: exp.Expression[] = []
-    const thisArg = expr.args.this
-    if (thisArg instanceof exp.Expression) {
-      args.push(thisArg)
-    }
-    args.push(...expr.expressions)
-    return gen.funcCall(name, args)
-  }
-}
 
 function boolXorSql(gen: Generator, e: exp.Expression): string {
   const expr = e as exp.Xor

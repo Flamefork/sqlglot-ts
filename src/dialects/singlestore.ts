@@ -7,22 +7,10 @@ import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import type { Generator } from "../generator.js"
 import { Parser } from "../parser.js"
+import { renameFunc } from "../transforms.js"
 import { MySQLGenerator } from "./mysql.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
-
-function renameFunc(name: string): Transform {
-  return (gen: Generator, e: exp.Expression) => {
-    const expr = e as exp.Func
-    const args: exp.Expression[] = []
-    const argTypes = (expr.constructor as typeof exp.Expression).argTypes
-    for (const key of Object.keys(argTypes)) {
-      const val = expr.args[key]
-      if (val instanceof exp.Expression) args.push(val)
-    }
-    return gen.funcCall(name, args)
-  }
-}
 
 export class SingleStoreParser extends Parser {
   static override FUNCTIONS = new Map([

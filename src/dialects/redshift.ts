@@ -2,7 +2,11 @@
  * Amazon Redshift dialect (extends Postgres)
  */
 
-import { Dialect } from "../dialect.js"
+import {
+  Dialect,
+  buildEscapedSequences,
+  buildUnescapedSequences,
+} from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import type { Generator } from "../generator.js"
@@ -12,22 +16,12 @@ import {
   eliminateSemiAndAntiJoins,
   eliminateWindowClause,
   preprocess,
+  renameFunc,
   unqualifyUnnest,
 } from "../transforms.js"
 import { PostgresGenerator } from "./postgres.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
-
-function renameFunc(name: string): Transform {
-  return (gen: Generator, e: exp.Expression) => {
-    const expr = e as exp.Func
-    const args: exp.Expression[] = []
-    const thisArg = expr.args.this
-    if (thisArg instanceof exp.Expression) args.push(thisArg)
-    args.push(...expr.expressions)
-    return gen.funcCall(name, args)
-  }
-}
 
 export class RedshiftParser extends Parser {
   static override FUNCTIONS = new Map([
@@ -61,6 +55,11 @@ export class RedshiftGenerator extends PostgresGenerator {
   static override BIT_END: string | null = null
   static override HEX_START: string | null = null
   static override HEX_END: string | null = null
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    buildUnescapedSequences(),
+  )
+  static override STRING_ESCAPES = ["\\", "'"]
 
   static override TRANSFORMS: Map<ExpressionClass, Transform> = new Map<
     ExpressionClass,
@@ -116,6 +115,12 @@ export class RedshiftDialect extends Dialect {
   static override readonly name = "redshift"
   static override INDEX_OFFSET = 0
   static override HEX_LOWERCASE = true
+  static override STRING_ESCAPES = ["\\", "'"]
+  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    RedshiftDialect.UNESCAPED_SEQUENCES,
+  )
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
   protected static override ParserClass = RedshiftParser
   protected static override GeneratorClass = RedshiftGenerator
 }

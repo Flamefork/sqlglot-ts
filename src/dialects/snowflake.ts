@@ -2,7 +2,11 @@
  * Snowflake dialect
  */
 
-import { Dialect } from "../dialect.js"
+import {
+  Dialect,
+  buildEscapedSequences,
+  buildUnescapedSequences,
+} from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
@@ -15,29 +19,12 @@ import {
   eliminateWindowClause,
   explodeProjectionToUnnest,
   preprocess,
+  renameFunc,
   timestamptrunc_sql,
   timestrtotime_sql,
 } from "../transforms.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
-
-function renameFunc(name: string): Transform {
-  return (gen: Generator, e: exp.Expression) => {
-    const expr = e as exp.Func
-    const args: exp.Expression[] = []
-    const thisArg = expr.args.this
-    if (thisArg instanceof exp.Expression) {
-      args.push(thisArg)
-    }
-    // For Binary expressions (Xor, etc.), add `expression` arg
-    const expressionArg = expr.args.expression
-    if (expressionArg instanceof exp.Expression) {
-      args.push(expressionArg)
-    }
-    args.push(...expr.expressions)
-    return gen.funcCall(name, args)
-  }
-}
 
 export class SnowflakeTokenizer extends Tokenizer {
   constructor(options = {}) {
@@ -87,6 +74,7 @@ export class SnowflakeParser extends Parser {
   }
 
   static override TYPE_NAME_MAPPING: Map<string, string> = new Map([
+    ...Parser.TYPE_NAME_MAPPING,
     ["NUMBER", "DECIMAL"],
   ])
 
@@ -430,6 +418,11 @@ export class SnowflakeGenerator extends Generator {
     | "nulls_are_last" = "nulls_are_large"
   static override HEX_START: string | null = "x'"
   static override HEX_END: string | null = "'"
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    buildUnescapedSequences(),
+  )
+  static override STRING_ESCAPES = ["\\", "'"]
   protected override STRUCT_DELIMITER: [string, string] = ["(", ")"]
   protected override INSERT_OVERWRITE = " OVERWRITE INTO"
   protected override ARRAY_SIZE_NAME = "ARRAY_SIZE"
@@ -536,6 +529,25 @@ export class SnowflakeGenerator extends Generator {
     [exp.DayOfWeek, renameFunc("DAYOFWEEK")],
     [exp.DayOfYear, renameFunc("DAYOFYEAR")],
     [exp.Explode, renameFunc("FLATTEN")],
+    [
+      exp.GenerateSeries,
+      (gen: Generator, e: exp.Expression) => {
+        const expr = e as exp.GenerateSeries
+        const start = expr.args.start as exp.Expression
+        const end = expr.args.end as exp.Expression
+        const step = expr.args.step as exp.Expression | undefined
+        const wrappedEnd =
+          end instanceof exp.Binary ? new exp.Paren({ this: end }) : end
+        const endPlusOne = new exp.Add({
+          this: wrappedEnd,
+          expression: exp.Literal.number(1),
+        })
+        return gen.funcCall(
+          "ARRAY_GENERATE_RANGE",
+          step ? [start, endPlusOne, step] : [start, endPlusOne],
+        )
+      },
+    ],
     [exp.JSONKeys, renameFunc("OBJECT_KEYS")],
     [exp.LogicalAnd, renameFunc("BOOLAND_AGG")],
     [exp.LogicalOr, renameFunc("BOOLOR_AGG")],
@@ -707,10 +719,63 @@ export class SnowflakeGenerator extends Generator {
     return sql
   }
 
-  // Snowflake QUALIFY clause (already in Select parsing)
+  protected override unnest_sql(expression: exp.Unnest): string {
+    const unnestAlias = expression.args.alias as exp.TableAlias | undefined
+    const offset = expression.args.offset
 
-  // Snowflake SAMPLE syntax
-  // Snowflake FLATTEN for arrays
+    const unnestAliasColumns = unnestAlias?.args.columns as
+      | exp.Expression[]
+      | undefined
+    const value =
+      (unnestAliasColumns && unnestAliasColumns[0]) || exp.toIdentifier("value")
+
+    const columns = [
+      exp.toIdentifier("seq"),
+      exp.toIdentifier("key"),
+      exp.toIdentifier("path"),
+      offset instanceof exp.Expression
+        ? offset.pop()
+        : exp.toIdentifier("index"),
+      value,
+      exp.toIdentifier("this"),
+    ]
+
+    if (unnestAlias) {
+      unnestAlias.set("columns", columns)
+    } else {
+      expression.set("alias", new exp.TableAlias({ this: "_u", columns }))
+    }
+
+    const exprsArg = expression.args.expressions
+    let tableInput = Array.isArray(exprsArg)
+      ? this.expressions(exprsArg)
+      : exprsArg instanceof exp.Expression
+        ? this.sql(exprsArg)
+        : ""
+
+    if (!tableInput.startsWith("INPUT =>")) {
+      tableInput = `INPUT => ${tableInput}`
+    }
+
+    const parent = expression.parent
+    const explode =
+      parent instanceof exp.Lateral
+        ? `FLATTEN(${tableInput})`
+        : `TABLE(FLATTEN(${tableInput}))`
+
+    const alias = expression.args.alias
+      ? ` AS ${this.sql(expression.args.alias as exp.Expression)}`
+      : ""
+
+    const valueSql =
+      parent instanceof exp.From ||
+      parent instanceof exp.Join ||
+      parent instanceof exp.Lateral
+        ? ""
+        : `${this.sql(value)} FROM `
+
+    return `${valueSql}${explode}${alias}`
+  }
 
   protected parsejson_sql(expression: exp.ParseJSON): string {
     const name = expression.args.safe ? "TRY_PARSE_JSON" : "PARSE_JSON"
@@ -754,6 +819,12 @@ export class SnowflakeDialect extends Dialect {
     | "nulls_are_small"
     | "nulls_are_large"
     | "nulls_are_last" = "nulls_are_large"
+  static override STRING_ESCAPES = ["\\", "'"]
+  static override UNESCAPED_SEQUENCES = buildUnescapedSequences()
+  static override ESCAPED_SEQUENCES = buildEscapedSequences(
+    SnowflakeDialect.UNESCAPED_SEQUENCES,
+  )
+  static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
   protected static override TokenizerClass = SnowflakeTokenizer
   protected static override ParserClass = SnowflakeParser
   protected static override GeneratorClass = SnowflakeGenerator

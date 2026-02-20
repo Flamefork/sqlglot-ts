@@ -523,6 +523,11 @@ export class Generator {
   static UNICODE_START: string | null = null
   static UNICODE_END: string | null = null
 
+  // String escape configuration (matches Python Dialect properties)
+  static STRINGS_SUPPORT_ESCAPED_SEQUENCES = false
+  static ESCAPED_SEQUENCES: Record<string, string> = {}
+  static STRING_ESCAPES: string[] = ["'"]
+
   protected PARSE_JSON_NAME: string | null = "PARSE_JSON"
   protected SUPPORTS_UESCAPE = true
 
@@ -538,6 +543,7 @@ export class Generator {
   protected maxTextWidth: number
   protected version: [number, number, number]
   private _nameCounter = 0
+  private _escapedQuoteEnd = "''"
 
   // Instance transforms (merged with static)
   protected transforms: Map<ExpressionClass, Transform>
@@ -565,6 +571,9 @@ export class Generator {
 
     // Merge features from class (for dialect inheritance)
     this.features = { ...(this.constructor as typeof Generator).FEATURES }
+
+    const ctor = this.constructor as typeof Generator
+    this._escapedQuoteEnd = ctor.STRING_ESCAPES[0] + "'"
   }
 
   generate(expression: exp.Expression, copy = true): string {
@@ -705,7 +714,8 @@ export class Generator {
 
   protected literal_sql(expression: exp.Literal): string {
     if (expression.isString) {
-      return this.quoteString(expression.text("this"))
+      const text = expression.text("this")
+      return `'${this.escape_str(text)}'`
     }
     return expression.text("this")
   }
@@ -4371,8 +4381,23 @@ export class Generator {
     return `"${name.replace(/"/g, '""')}"`
   }
 
+  protected escape_str(text: string, escapeBackslash = true): string {
+    const ctor = this.constructor as typeof Generator
+
+    if (ctor.STRINGS_SUPPORT_ESCAPED_SEQUENCES) {
+      text = [...text]
+        .map((ch) => {
+          if (!escapeBackslash && ch === "\\") return ch
+          return ctor.ESCAPED_SEQUENCES[ch] ?? ch
+        })
+        .join("")
+    }
+
+    return text.replaceAll("'", this._escapedQuoteEnd)
+  }
+
   protected quoteString(value: string): string {
-    return `'${value.replace(/'/g, "''")}'`
+    return `'${this.escape_str(value)}'`
   }
 
   protected shouldQuote(name: string): boolean {

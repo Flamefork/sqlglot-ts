@@ -8,7 +8,12 @@ import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
 import { type FunctionBuilder, Parser } from "../parser.js"
 import { TokenType, Tokenizer } from "../tokens.js"
-import { regexpReplaceGlobalModifier } from "../transforms.js"
+import {
+  preprocess,
+  regexpReplaceGlobalModifier,
+  renameFunc,
+  unqualifyColumns,
+} from "../transforms.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
 
@@ -80,23 +85,7 @@ function arrayCompactSql(gen: Generator, e: exp.Expression): string {
   )
 }
 
-function renameFunc(name: string): Transform {
-  return (gen: Generator, e: exp.Expression) => {
-    const expr = e as exp.Func
-    const args: exp.Expression[] = []
-    const thisArg = expr.args.this
-    if (thisArg instanceof exp.Expression) {
-      args.push(thisArg)
-    }
-    // For Binary expressions (ArrayContains, etc.), add `expression` arg
-    const expressionArg = expr.args.expression
-    if (expressionArg instanceof exp.Expression) {
-      args.push(expressionArg)
-    }
-    args.push(...expr.expressions)
-    return gen.funcCall(name, args)
-  }
-}
+// renameFunc is imported from transforms.ts
 
 function boolXorSql(gen: Generator, e: exp.Expression): string {
   const expr = e as exp.Xor
@@ -799,6 +788,7 @@ export class DuckDBParser extends Parser {
 
   // DuckDB type name remapping (mirrors Python DuckDB tokenizer keyword mappings)
   static override TYPE_NAME_MAPPING: Map<string, string> = new Map([
+    ...Parser.TYPE_NAME_MAPPING,
     ["TIMESTAMP", "TIMESTAMPNTZ"],
     ["TIMESTAMP_US", "TIMESTAMP"],
     ["NUMERIC", "DECIMAL"],
@@ -921,9 +911,7 @@ export class DuckDBParser extends Parser {
     if (this.match(TokenType.SELECT)) {
       thisExpr = this.parseSelect()
     } else if (this.match(TokenType.STRING)) {
-      const text = this.prev.text
-      const inner = text.slice(1, -1).replace(/''/g, "'").replace(/""/g, '"')
-      thisExpr = exp.Literal.string(inner)
+      thisExpr = exp.Literal.string(this.prev.text)
     } else {
       thisExpr = this.parseTableName()
     }
@@ -952,9 +940,7 @@ export class DuckDBParser extends Parser {
     // Try to parse a string first
     if (this.currentTokenType === TokenType.STRING) {
       this.advance()
-      const text = this.prev.text
-      const inner = text.slice(1, -1).replace(/''/g, "'").replace(/""/g, '"')
-      return exp.Literal.string(inner)
+      return exp.Literal.string(this.prev.text)
     }
     // Otherwise parse as identifier
     return this.parseIdentifier()
@@ -1019,9 +1005,7 @@ export class DuckDBParser extends Parser {
   private parseAnyToken(): exp.Expression {
     if (this.currentTokenType === TokenType.STRING) {
       this.advance()
-      const text = this.prev.text
-      const inner = text.slice(1, -1).replace(/''/g, "'").replace(/""/g, '"')
-      return exp.Literal.string(inner)
+      return exp.Literal.string(this.prev.text)
     }
     const token = this.advance()
     return new exp.Var({ this: token.text })
@@ -1378,6 +1362,7 @@ export class DuckDBGenerator extends Generator {
       },
     ],
     [exp.GroupConcat, groupconcatSql],
+    [exp.Pivot, preprocess([unqualifyColumns])],
     [exp.Rand, renameFunc("RANDOM")],
     [
       exp.RegexpFullMatch,
@@ -2209,8 +2194,18 @@ export class DuckDBGenerator extends Generator {
   }
 
   protected regexpextract_sql(expression: exp.RegexpExtract): string {
+    let thisExpr = expression.args.this as exp.Expression
     let group = expression.args.group as exp.Expression | undefined
     const params = expression.args.parameters as exp.Expression | undefined
+    const position = expression.args.position as exp.Expression | undefined
+    const occurrence = expression.args.occurrence as exp.Expression | undefined
+
+    if (
+      position &&
+      (!position.is_int || Number((position as exp.Literal).value) > 1)
+    ) {
+      thisExpr = new exp.Substring({ this: thisExpr, start: position })
+    }
 
     if (
       !params &&
@@ -2222,8 +2217,21 @@ export class DuckDBGenerator extends Generator {
       group = undefined
     }
 
+    if (
+      occurrence &&
+      (!occurrence.is_int || Number((occurrence as exp.Literal).value) > 1)
+    ) {
+      const extractAllSql = this.funcCall("REGEXP_EXTRACT_ALL", [
+        thisExpr,
+        expression.args.expression as exp.Expression,
+        ...(group ? [group] : []),
+        ...(params ? [params] : []),
+      ])
+      return `ARRAY_EXTRACT(${extractAllSql}, ${this.sql(occurrence as exp.Expression)})`
+    }
+
     return this.funcCall("REGEXP_EXTRACT", [
-      expression.args.this as exp.Expression,
+      thisExpr,
       expression.args.expression as exp.Expression,
       ...(group ? [group] : []),
       ...(params ? [params] : []),

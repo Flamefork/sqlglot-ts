@@ -14,31 +14,12 @@ import {
   eliminateSemiAndAntiJoins,
   preprocess,
   regexpReplaceGlobalModifier,
+  renameFunc,
   timestamptrunc_sql,
   timestrtotime_sql,
 } from "../transforms.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
-
-function renameFunc(name: string): Transform {
-  return (gen: Generator, e: exp.Expression) => {
-    const expr = e as exp.Func
-    const args: exp.Expression[] = []
-    const argTypes = (expr.constructor as typeof exp.Expression).argTypes
-    for (const key of Object.keys(argTypes)) {
-      if (key === "order") continue
-      const argValue = expr.args[key]
-      if (Array.isArray(argValue)) {
-        for (const value of argValue) {
-          if (value instanceof exp.Expression) args.push(value)
-        }
-      } else if (argValue instanceof exp.Expression) {
-        args.push(argValue)
-      }
-    }
-    return gen.funcCall(name, args)
-  }
-}
 
 function boolXorSql(gen: Generator, e: exp.Expression): string {
   const expr = e as exp.Xor

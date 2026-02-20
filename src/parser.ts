@@ -661,7 +661,33 @@ export class Parser {
     return fns
   })()
 
-  static TYPE_NAME_MAPPING: Map<string, string> = new Map()
+  static TYPE_NAME_MAPPING: Map<string, string> = new Map([
+    ["INTEGER", "INT"],
+    ["INT4", "INT"],
+    ["INT32", "INT"],
+    ["BOOL", "BOOLEAN"],
+    ["NUMERIC", "DECIMAL"],
+    ["DEC", "DECIMAL"],
+    ["FIXED", "DECIMAL"],
+    ["NUMBER", "DECIMAL"],
+    ["REAL", "FLOAT"],
+    ["FLOAT4", "FLOAT"],
+    ["INT1", "TINYINT"],
+    ["BYTE", "TINYINT"],
+    ["INT2", "SMALLINT"],
+    ["INT16", "SMALLINT"],
+    ["SHORT", "SMALLINT"],
+    ["INT64", "BIGINT"],
+    ["LONG", "BIGINT"],
+    ["CLOB", "TEXT"],
+    ["LONGVARCHAR", "TEXT"],
+    ["STR", "TEXT"],
+    ["STRING", "TEXT"],
+    ["CHARACTER", "CHAR"],
+    ["CHARACTER VARYING", "VARCHAR"],
+    ["CHAR VARYING", "VARCHAR"],
+    ["VARCHAR2", "VARCHAR"],
+  ])
   static TYPE_CONVERTERS: Map<string, (dt: exp.DataType) => exp.DataType> =
     new Map()
   static ADD_JOIN_ON_TRUE = false
@@ -1134,7 +1160,13 @@ export class Parser {
     // Fallback: collect remaining tokens as command
     const parts: string[] = []
     while (!this.isEnd() && this.current.tokenType !== TokenType.SEMICOLON) {
-      parts.push(this.advance().text)
+      const tok = this.current
+      this.advance()
+      if (tok.tokenType === TokenType.STRING) {
+        parts.push(`'${tok.text.replaceAll("'", "''")}'`)
+      } else {
+        parts.push(tok.text)
+      }
     }
     if (parts.length > 0) {
       const command = new exp.Command({
@@ -1191,9 +1223,7 @@ export class Parser {
     if (IDENTIFIER_TOKENS.has(this.current.tokenType)) {
       name = this.parseIdentifier()
     } else if (this.current.tokenType === TokenType.STRING) {
-      const raw = this.advance().text
-      const inner = raw.slice(1, -1)
-      name = new exp.Identifier({ this: inner, quoted: true })
+      name = new exp.Identifier({ this: this.advance().text, quoted: true })
     }
     if (!name) return undefined
 
@@ -1507,7 +1537,7 @@ export class Parser {
     const thisExpr =
       this.current.tokenType === TokenType.STRING
         ? new exp.Identifier({
-            this: this.advance().text.slice(1, -1),
+            this: this.advance().text,
             quoted: true,
           })
         : new exp.Identifier({ this: this.advance().text })
@@ -1684,9 +1714,10 @@ export class Parser {
 
     // String literal as table reference (e.g., FROM 'x.y' in DuckDB)
     if (this.current.tokenType === TokenType.STRING) {
-      const text = this.advance().text
-      const inner = text.slice(1, -1)
-      const ident = new exp.Identifier({ this: inner, quoted: true })
+      const ident = new exp.Identifier({
+        this: this.advance().text,
+        quoted: true,
+      })
       const table = new exp.Table({ this: ident })
       return this.maybeParseAlias(table)
     }
@@ -2629,17 +2660,13 @@ export class Parser {
 
     // String
     if (this.match(TokenType.STRING)) {
-      // Remove quotes
-      const text = this.prev.text
-      const inner = text.slice(1, -1).replace(/''/g, "'").replace(/""/g, '"')
-      return exp.Literal.string(inner)
+      return exp.Literal.string(this.prev.text)
     }
 
     // National string (N'...')
     // Token text contains just the content (quotes and prefix removed by tokenizer)
     if (this.match(TokenType.NATIONAL_STRING)) {
-      const content = this.prev.text.replace(/''/g, "'").replace(/""/g, '"')
-      return new exp.National({ this: exp.Literal.string(content) })
+      return new exp.National({ this: exp.Literal.string(this.prev.text) })
     }
 
     // Bit string (B'...' or 0b...)
@@ -3556,9 +3583,8 @@ export class Parser {
     if (this.match(TokenType.L_PAREN)) {
       const expressions: exp.Expression[] = []
 
-      // For STRUCT, MAP, etc. - parse as column definitions (name TYPE pairs)
+      // For STRUCT types - parse as column definitions (name TYPE pairs)
       if (STRUCT_TYPE_NAMES.has(name)) {
-        // Parse column definitions: name TYPE, name TYPE, ...
         do {
           const colName = this.parseIdentifier()
           const colType = this.parseDataType()
@@ -3569,6 +3595,12 @@ export class Parser {
             }),
           )
         } while (this.match(TokenType.COMMA))
+      } else if (NESTED_TYPE_NAMES.has(name) && !STRUCT_TYPE_NAMES.has(name)) {
+        // For nested types (MAP, ARRAY, LIST, etc.) - parse inner types as DataType
+        expressions.push(this.parseDataType())
+        while (this.match(TokenType.COMMA)) {
+          expressions.push(this.parseDataType())
+        }
       } else {
         // For other types, parse as expressions (size/precision)
         expressions.push(this.parsePrimary())
@@ -5480,7 +5512,11 @@ function joinTokens(tokens: Token[]): string {
         text += " "
       }
     }
-    text += tok.text
+    if (tok.tokenType === TokenType.STRING) {
+      text += `'${tok.text.replaceAll("'", "''")}'`
+    } else {
+      text += tok.text
+    }
   }
   return text
 }

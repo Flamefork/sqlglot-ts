@@ -7,21 +7,10 @@ import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import type { Generator } from "../generator.js"
 import { Parser } from "../parser.js"
-import { unitToStr } from "../transforms.js"
+import { renameFunc, unitToStr } from "../transforms.js"
 import { MySQLGenerator } from "./mysql.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
-
-function renameFunc(name: string): Transform {
-  return (gen: Generator, e: exp.Expression) => {
-    const expr = e as exp.Func
-    const args: exp.Expression[] = []
-    const thisArg = expr.args.this
-    if (thisArg instanceof exp.Expression) args.push(thisArg)
-    args.push(...expr.expressions)
-    return gen.funcCall(name, args)
-  }
-}
 
 export class StarRocksParser extends Parser {}
 

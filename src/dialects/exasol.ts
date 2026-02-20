@@ -7,25 +7,9 @@ import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
 import { Parser } from "../parser.js"
+import { renameFunc } from "../transforms.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
-
-function renameFunc(name: string): Transform {
-  return (gen: Generator, e: exp.Expression) => {
-    const expr = e as exp.Func
-    const args: exp.Expression[] = []
-    const thisArg = expr.args.this
-    if (thisArg instanceof exp.Expression) {
-      args.push(thisArg)
-    }
-    const expressionArg = expr.args.expression
-    if (expressionArg instanceof exp.Expression) {
-      args.push(expressionArg)
-    }
-    args.push(...expr.expressions)
-    return gen.funcCall(name, args)
-  }
-}
 
 function sha2Sql(gen: Generator, e: exp.Expression): string {
   const expr = e as exp.SHA2
