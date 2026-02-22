@@ -130,6 +130,7 @@ npm test           # format:check + lint + typecheck + pytest DuckDB
 npm run pytest     # Full pytest run (all dialects)
 npm run fix        # Format + lint fix
 npm run generate   # Generate TS expressions from Python SQLGlot
+npm run release -- 0.2.0  # Bump version, commit, tag, push → CI publishes to npm
 ```
 
 ## Differences from Python SQLGlot
