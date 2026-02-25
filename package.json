@@ -34,9 +34,11 @@
 	],
 	"scripts": {
 		"build": "tsdown",
-		"pytest": "uv run --directory tools pytest ../sqlglot/tests/dialects/ -v --tb=short -c pyproject.toml -p conftest --import-mode=importlib -k 'not test_lazy_load'",
-		"test": "oxfmt --check src && oxlint src && tsc --noEmit && npm run pytest -- -k TestDuckDB",
-		"fix": "oxfmt src && oxlint --fix src",
+		"test:examples": "node --test examples/*.test.mjs",
+		"test:packaging": "bash tools/packaging_test.sh",
+		"test:compat": "uv run --directory tools pytest ../sqlglot/tests/dialects/ -v --tb=short -c pyproject.toml -p conftest --import-mode=importlib -k 'not test_lazy_load'",
+		"test": "oxfmt --check src examples && oxlint src examples && tsc --noEmit && npm run test:examples && npm run test:compat -- -k TestDuckDB",
+		"fix": "oxfmt src examples && oxlint --fix src examples",
 		"generate": "uv run --directory tools generate.py",
 		"release": "sh tools/release.sh"
 	},

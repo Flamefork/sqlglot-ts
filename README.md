@@ -121,15 +121,24 @@ Typical sizes (gzipped):
 - Core + one dialect: ~100–120KB
 - All dialects: ~150KB
 
+## Examples
+
+Runnable examples that double as tests live in [`examples/`](./examples/) — they import from `sqlglot-ts` just like user code and cover the full public API: parsing, transpilation, dialects, AST traversal, builder, and serialization.
+
+```bash
+npm run test:examples  # Run all examples
+```
+
 ## Development
 
 ```bash
-npm install        # Install dependencies
-npm run build      # Build
-npm test           # format:check + lint + typecheck + pytest DuckDB
-npm run pytest     # Full pytest run (all dialects)
-npm run fix        # Format + lint fix
-npm run generate   # Generate TS expressions from Python SQLGlot
+npm install            # Install dependencies
+npm run build          # Build
+npm test               # format:check + lint + typecheck + examples + compat DuckDB
+npm run test:compat    # Full compat run (all dialects)
+npm run test:packaging # npm pack → temp install → verify exports
+npm run fix            # Format + lint fix
+npm run generate       # Generate TS expressions from Python SQLGlot
 npm run release -- 0.2.0  # Bump version, commit, tag, push → CI publishes to npm
 ```
 

@@ -26,6 +26,8 @@ jobs:
         run: npm run build
       - name: Test
         run: npm test
+      - name: Packaging test
+        run: npm run test:packaging
       - name: Check codegen freshness
         run: npm run generate && git diff --exit-code src/expressions.generated.ts
   publish:
