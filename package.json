@@ -1,6 +1,6 @@
 {
 	"name": "sqlglot-ts",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"description": "SQL parser and transpiler for TypeScript - port of SQLGlot",
 	"type": "module",
 	"exports": {
