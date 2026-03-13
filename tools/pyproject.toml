@@ -15,6 +15,10 @@ testpaths = [
   "../sqlglot/tests/dialects",
   "../sqlglot/tests/test_build.py",
   "../sqlglot/tests/test_expressions.py",
+  "../sqlglot/tests/test_generator.py",
+  "../sqlglot/tests/test_transpile.py",
+  "../sqlglot/tests/test_parser.py",
+  "../sqlglot/tests/test_tokens.py",
 ]
 addopts = "-v --tb=short -p conftest --import-mode=importlib -k 'not test_lazy_load'"
 

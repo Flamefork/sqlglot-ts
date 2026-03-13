@@ -12,7 +12,9 @@ import "../../dist/dialects/index.mjs"
 import { indexOffsetLogs } from "../../dist/expressions.mjs"
 import * as indexMod from "../../dist/index.mjs"
 
-const { annotateTypes, parse, parseOne, transpile } = indexMod
+const { annotateTypes, parse, parseOne, transpile, Tokenizer, TokenType } =
+  indexMod
+import { Dialect } from "../../dist/dialect.mjs"
 
 // Snake_case to camelCase conversion for Python→TS name mapping
 function toCamel(name) {
@@ -455,6 +457,37 @@ rl.on("line", (line) => {
           const id = storeExpr(copied)
           result = { ok: true, id, key: copied.key }
         }
+        break
+      }
+
+      case "tokenize": {
+        let tokenizer
+        if (cmd.dialect) {
+          const dialect = Dialect.getOrThrow(cmd.dialect)
+          tokenizer = dialect.createTokenizer()
+        } else {
+          tokenizer = new Tokenizer()
+        }
+        const tokens = tokenizer.tokenize(cmd.sql)
+        const serialized = tokens.map((t) => ({
+          tokenType: t.tokenType,
+          text: t.text,
+          line: t.line,
+          col: t.col,
+          start: t.start,
+          end: t.end,
+          comments: t.comments,
+        }))
+        result = { ok: true, tokens: serialized }
+        break
+      }
+
+      case "tokenTypes": {
+        const types = {}
+        for (const [key, value] of Object.entries(TokenType)) {
+          types[key] = value
+        }
+        result = { ok: true, types }
         break
       }
 
