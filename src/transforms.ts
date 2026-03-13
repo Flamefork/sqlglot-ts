@@ -375,7 +375,7 @@ export function explodeProjectionToUnnest(
           if (expression.args.from_) {
             expression.join(series, { copy: false, joinType: "CROSS" })
           } else {
-            expression.from(series, false)
+            expression.from_(series, { copy: false })
           }
         }
 
@@ -733,7 +733,7 @@ export function eliminateQualify(expression: exp.Expression): exp.Expression {
 
   // Wrap in subquery and add WHERE clause
   return outerSelects
-    .from(expression.subquery("_t"), false)
+    .from_(expression.subquery("_t"), { copy: false })
     .where(qualifyFilters)
 }
 
@@ -1020,7 +1020,7 @@ export function eliminateDistinctOn(
   // Wrap in subquery and filter
   return exp
     .select(...newSelects)
-    .from(expression.subquery("_t"))
+    .from_(expression.subquery("_t"))
     .where(
       new exp.EQ({
         this: exp.column(rowNumberWindowAlias),
@@ -1247,7 +1247,10 @@ export function ensureBools(expression: exp.Expression): exp.Expression {
       const argKey = node.argKey
       const index = node.index
 
-      const neq = new exp.NEQ({ this: node, expression: exp.Literal.number(0) })
+      const neq = new exp.NEQ({
+        this: node,
+        expression: exp.Literal.number(0),
+      })
 
       if (parent && argKey) {
         if (index !== undefined) {
@@ -1542,7 +1545,7 @@ export function eliminateFullOuterJoin(
     fullOuterJoin.set("side", "left")
     const antiJoinClause = exp
       .select("1")
-      .from(fromExpr.sql())
+      .from_(fromExpr.sql())
       .where(joinConditions.sql())
 
     const copyJoins = expressionCopy.args.joins as exp.Join[]
@@ -2059,7 +2062,7 @@ export function argMaxOrMinNoCount(name: string): Transform {
 
 export function dateAddIntervalSql(dataType: string, kind: string): Transform {
   return (gen: Generator, e: exp.Expression) => {
-    const thisSql = gen.sql(e, "this")
+    const thisSql = gen.sql(e.args.this)
     const unit = unitToVar(e)
     const interval = new exp.Interval({
       this: e.args.expression as exp.Expression,

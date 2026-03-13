@@ -276,6 +276,7 @@ export class HiveParser extends Parser {
 export class HiveGenerator extends Generator {
   protected override ARRAY_SIZE_NAME = "SIZE"
   protected override ALTER_SET_TYPE = ""
+  protected override JSON_PATH_SINGLE_QUOTE_ESCAPE = true
 
   static override STRINGS_SUPPORT_ESCAPED_SEQUENCES = true
   static override ESCAPED_SEQUENCES: Record<string, string> =
@@ -399,7 +400,7 @@ export class HiveGenerator extends Generator {
         const scale = expr.args.scale as exp.Literal | undefined
         const scaleValue =
           scale instanceof exp.Literal ? String(scale.value) : undefined
-        const timestamp = gen.sql(expr.args.this as exp.Expression)
+        const timestamp = gen.sql(expr.args.this)
         if (!scaleValue || scaleValue === "0") {
           return `FROM_UNIXTIME(${timestamp})`
         }
@@ -410,9 +411,7 @@ export class HiveGenerator extends Generator {
       exp.TimeToStr,
       (gen: Generator, e: exp.Expression) => {
         const fmt = gen.formatTimeStr(e)
-        const thisExpr = gen.sql(
-          (e as exp.TimeToStr).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this as exp.Expression)
         return `DATE_FORMAT(${thisExpr}, ${fmt})`
       },
     ],
@@ -420,17 +419,15 @@ export class HiveGenerator extends Generator {
       exp.StrToTime,
       (gen: Generator, e: exp.Expression) => {
         const fmt = gen.formatTimeStr(e)
-        const thisExpr = gen.sql(
-          (e as exp.StrToTime).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this as exp.Expression)
         return `CAST(FROM_UNIXTIME(UNIX_TIMESTAMP(${thisExpr}, ${fmt})) AS TIMESTAMP)`
       },
     ],
     [
       exp.TryCast,
       (gen: Generator, e: exp.Expression) => {
-        const thisExpr = gen.sql((e as exp.TryCast).args.this as exp.Expression)
-        const to = gen.sql((e as exp.TryCast).args.to as exp.Expression)
+        const thisExpr = gen.sql(e.args.this as exp.Expression)
+        const to = gen.sql(e.args.to as exp.Expression)
         return `CAST(${thisExpr} AS ${to})`
       },
     ],
@@ -466,7 +463,7 @@ export class HiveGenerator extends Generator {
       exp.StructExtract,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.StructExtract
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const field = String(
           (expr.args.expression as exp.Expression).args.this ?? "",
         )
@@ -523,8 +520,8 @@ export class HiveGenerator extends Generator {
       exp.Split,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.Split
-        const thisStr = gen.sql(expr.args.this as exp.Expression)
-        const delimStr = gen.sql(expr.args.expression as exp.Expression)
+        const thisStr = gen.sql(expr.args.this)
+        const delimStr = gen.sql(expr.args.expression)
         return `SPLIT(${thisStr}, CONCAT('\\\\Q', ${delimStr}, '\\\\E'))`
       },
     ],
@@ -545,6 +542,7 @@ export class HiveGenerator extends Generator {
 
   protected override ALIAS_POST_TABLESAMPLE = true
   protected override TABLESAMPLE_WITH_METHOD = false
+  protected override WITH_PROPERTIES_PREFIX = "TBLPROPERTIES"
 
   private static PARAMETERIZABLE_TEXT_TYPES = new Set([
     "NVARCHAR",
@@ -552,6 +550,22 @@ export class HiveGenerator extends Generator {
     "CHAR",
     "NCHAR",
   ])
+
+  protected override fileformatproperty_sql(
+    expression: exp.FileFormatProperty,
+  ): string {
+    if (expression.args.this instanceof exp.InputOutputFormat) {
+      return this.sql(expression.args.this)
+    }
+    return `STORED AS ${expression.name.toUpperCase()}`
+  }
+
+  protected override isRootProperty(p: exp.Expression): boolean {
+    return (
+      p instanceof exp.FileFormatProperty ||
+      p instanceof exp.PartitionedByProperty
+    )
+  }
 
   protected override array_sql(expression: exp.Array): string {
     return `ARRAY(${this.expressions(expression.expressions)})`

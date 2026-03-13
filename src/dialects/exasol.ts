@@ -115,9 +115,9 @@ export class ExasolGenerator extends Generator {
   ])
 
   protected override if_sql(expression: exp.If): string {
-    const thisExpr = this.sql(expression, "this")
-    const trueExpr = this.sql(expression, "true")
-    const falseExpr = this.sql(expression, "false")
+    const thisExpr = this.sql(expression.args.this)
+    const trueExpr = this.sql(expression.args.true)
+    const falseExpr = this.sql(expression.args.false)
     return `IF ${thisExpr} THEN ${trueExpr} ELSE ${falseExpr} ENDIF`
   }
 }

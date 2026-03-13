@@ -3,9 +3,6 @@
 	"version": "0.1.2",
 	"description": "SQL parser and transpiler for TypeScript - port of SQLGlot",
 	"type": "module",
-	"main": "./dist/index.mjs",
-	"module": "./dist/index.mjs",
-	"types": "./dist/index.d.mts",
 	"exports": {
 		".": {
 			"types": "./dist/index.d.mts",
@@ -23,25 +20,15 @@
 			"default": "./dist/dialects/*.mjs"
 		},
 		"./expressions": {
-			"types": "./dist/expressions.generated.d.mts",
-			"import": "./dist/expressions.generated.mjs",
-			"default": "./dist/expressions.generated.mjs"
+			"types": "./dist/expressions.d.mts",
+			"import": "./dist/expressions.mjs",
+			"default": "./dist/expressions.mjs"
 		},
 		"./package.json": "./package.json"
 	},
 	"files": [
 		"dist"
 	],
-	"scripts": {
-		"build": "tsdown",
-		"test:examples": "node --test examples/*.test.mjs",
-		"test:packaging": "bash tools/packaging_test.sh",
-		"test:compat": "uv run --directory tools pytest ../sqlglot/tests/dialects/ -v --tb=short -c pyproject.toml -p conftest --import-mode=importlib -k 'not test_lazy_load'",
-		"test": "oxfmt --check src examples && oxlint src examples && tsc --noEmit && npm run test:examples && npm run test:compat -- -k TestDuckDB",
-		"fix": "oxfmt src examples && oxlint --fix src examples",
-		"generate": "uv run --directory tools generate.py",
-		"release": "sh tools/release.sh"
-	},
 	"keywords": [
 		"sql",
 		"parser",
@@ -60,6 +47,7 @@
 	},
 	"sideEffects": [
 		"./dist/index.mjs",
+		"./dist/expressions.mjs",
 		"./dist/dialects/*.mjs"
 	],
 	"license": "MIT",

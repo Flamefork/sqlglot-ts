@@ -2,7 +2,7 @@
  * SQL generator - converts AST back to SQL strings
  */
 
-import type { ExpressionClass } from "./expression-base.js"
+import type { ArgValue, ExpressionClass } from "./expression-base.js"
 import * as exp from "./expressions.js"
 import { indexOffsetLogs } from "./expressions.js"
 import { formatTime } from "./time.js"
@@ -242,24 +242,66 @@ export class Generator {
     [exp.JSONBExtract, (g, e) => g.binary_sql(e as exp.Binary, "#>")],
     [exp.JSONBExtractScalar, (g, e) => g.binary_sql(e as exp.Binary, "#>>")],
 
+    // JSON path parts
+    [exp.JSONPathFilter, (_g, e) => `?${(e as exp.JSONPathFilter).args.this}`],
+    [exp.JSONPathKey, (g, e) => g.jsonpathkey_sql(e as exp.JSONPathKey)],
+    [
+      exp.JSONPathRecursive,
+      (_g, e) => `..${(e as exp.JSONPathRecursive).args.this ?? ""}`,
+    ],
+    [exp.JSONPathRoot, () => "$"],
+    [exp.JSONPathScript, (_g, e) => `(${(e as exp.JSONPathScript).args.this}`],
+    [
+      exp.JSONPathSelector,
+      (g, e) =>
+        `[${g.json_path_part((e as exp.JSONPathSelector).args.this as string | number | exp.JSONPathPart)}]`,
+    ],
+    [
+      exp.JSONPathSlice,
+      (g, e) => {
+        const args = (e as exp.JSONPathSlice).args
+        const parts = [args.start, args.end, args.step]
+        return parts
+          .filter((p) => p !== undefined && p !== null)
+          .map((p) =>
+            p === false || p === true
+              ? ""
+              : g.json_path_part(p as string | number | exp.JSONPathPart),
+          )
+          .join(":")
+      },
+    ],
+    [
+      exp.JSONPathSubscript,
+      (g, e) => g.jsonpathsubscript_sql(e as exp.JSONPathSubscript),
+    ],
+    [
+      exp.JSONPathUnion,
+      (g, e) =>
+        `[${(e as exp.JSONPathUnion).expressions
+          .map((p) => g.json_path_part(p as string | number | exp.JSONPathPart))
+          .join(",")}]`,
+    ],
+    [exp.JSONPathWildcard, () => "*"],
+
     // Simple constants
     [
       exp.CurrentDate,
       (g, e) => {
-        const z = g.sql(e, "this")
+        const z = g.sql(e.args.this)
         return z ? `CURRENT_DATE(${z})` : "CURRENT_DATE"
       },
     ],
     [
       exp.CurrentTime,
       (g, e) => {
-        const z = g.sql(e, "this")
+        const z = g.sql(e.args.this)
         return z ? `CURRENT_TIME(${z})` : "CURRENT_TIME"
       },
     ],
     [exp.CurrentCatalog, () => "CURRENT_CATALOG"],
     [exp.SessionUser, () => "SESSION_USER"],
-    [exp.PositionalColumn, (g, e) => `#${g.sql(e.this as exp.Expression)}`],
+    [exp.PositionalColumn, (g, e) => `#${g.sql(e.this)}`],
 
     // Keyword-only properties
     [exp.CopyGrantsProperty, () => "COPY GRANTS"],
@@ -284,54 +326,57 @@ export class Generator {
     [exp.ZeroFillColumnConstraint, () => "ZEROFILL"],
 
     // Prefix + SQL(this) properties
-    [exp.AutoRefreshProperty, (g, e) => `AUTO REFRESH ${g.sql(e, "this")}`],
-    [exp.BackupProperty, (g, e) => `BACKUP ${g.sql(e, "this")}`],
+    [exp.AutoRefreshProperty, (g, e) => `AUTO REFRESH ${g.sql(e.args.this)}`],
+    [exp.BackupProperty, (g, e) => `BACKUP ${g.sql(e.args.this)}`],
     [
       exp.CharacterSetColumnConstraint,
-      (g, e) => `CHARACTER SET ${g.sql(e, "this")}`,
+      (g, e) => `CHARACTER SET ${g.sql(e.args.this)}`,
     ],
-    [exp.CollateColumnConstraint, (g, e) => `COLLATE ${g.sql(e, "this")}`],
-    [exp.CommentColumnConstraint, (g, e) => `COMMENT ${g.sql(e, "this")}`],
-    [exp.ConnectByRoot, (g, e) => `CONNECT_BY_ROOT ${g.sql(e, "this")}`],
-    [exp.DateFormatColumnConstraint, (g, e) => `FORMAT ${g.sql(e, "this")}`],
-    [exp.DefaultColumnConstraint, (g, e) => `DEFAULT ${g.sql(e, "this")}`],
-    [exp.EncodeColumnConstraint, (g, e) => `ENCODE ${g.sql(e, "this")}`],
+    [exp.CollateColumnConstraint, (g, e) => `COLLATE ${g.sql(e.args.this)}`],
+    [exp.CommentColumnConstraint, (g, e) => `COMMENT ${g.sql(e.args.this)}`],
+    [exp.ConnectByRoot, (g, e) => `CONNECT_BY_ROOT ${g.sql(e.args.this)}`],
+    [exp.DateFormatColumnConstraint, (g, e) => `FORMAT ${g.sql(e.args.this)}`],
+    [exp.DefaultColumnConstraint, (g, e) => `DEFAULT ${g.sql(e.args.this)}`],
+    [exp.EncodeColumnConstraint, (g, e) => `ENCODE ${g.sql(e.args.this)}`],
     [
       exp.InlineLengthColumnConstraint,
-      (g, e) => `INLINE LENGTH ${g.sql(e, "this")}`,
+      (g, e) => `INLINE LENGTH ${g.sql(e.args.this)}`,
     ],
-    [exp.InputModelProperty, (g, e) => `INPUT${g.sql(e, "this")}`],
-    [exp.OnProperty, (g, e) => `ON ${g.sql(e, "this")}`],
-    [exp.OnUpdateColumnConstraint, (g, e) => `ON UPDATE ${g.sql(e, "this")}`],
-    [exp.OutputModelProperty, (g, e) => `OUTPUT${g.sql(e, "this")}`],
-    [exp.PathColumnConstraint, (g, e) => `PATH ${g.sql(e, "this")}`],
+    [exp.InputModelProperty, (g, e) => `INPUT${g.sql(e.args.this)}`],
+    [exp.OnProperty, (g, e) => `ON ${g.sql(e.args.this)}`],
+    [exp.OnUpdateColumnConstraint, (g, e) => `ON UPDATE ${g.sql(e.args.this)}`],
+    [exp.OutputModelProperty, (g, e) => `OUTPUT${g.sql(e.args.this)}`],
+    [exp.PathColumnConstraint, (g, e) => `PATH ${g.sql(e.args.this)}`],
     [
       exp.ProjectionPolicyColumnConstraint,
-      (g, e) => `PROJECTION POLICY ${g.sql(e, "this")}`,
+      (g, e) => `PROJECTION POLICY ${g.sql(e.args.this)}`,
     ],
     [
       exp.RemoteWithConnectionModelProperty,
-      (g, e) => `REMOTE WITH CONNECTION ${g.sql(e, "this")}`,
+      (g, e) => `REMOTE WITH CONNECTION ${g.sql(e.args.this)}`,
     ],
-    [exp.SampleProperty, (g, e) => `SAMPLE BY ${g.sql(e, "this")}`],
-    [exp.SecurityProperty, (g, e) => `SECURITY ${g.sql(e, "this")}`],
-    [exp.SharingProperty, (g, e) => `SHARING=${g.sql(e, "this")}`],
-    [exp.SqlSecurityProperty, (g, e) => `SQL SECURITY ${g.sql(e, "this")}`],
-    [exp.Stream, (g, e) => `STREAM ${g.sql(e, "this")}`],
-    [exp.TitleColumnConstraint, (g, e) => `TITLE ${g.sql(e, "this")}`],
-    [exp.ToMap, (g, e) => `MAP ${g.sql(e, "this")}`],
-    [exp.ToTableProperty, (g, e) => `TO ${g.sql(e.this as exp.Expression)}`],
-    [exp.UsingTemplateProperty, (g, e) => `USING TEMPLATE ${g.sql(e, "this")}`],
-    [exp.UsingData, (g, e) => `USING DATA ${g.sql(e, "this")}`],
-    [exp.Variadic, (g, e) => `VARIADIC ${g.sql(e, "this")}`],
-    [exp.ViewAttributeProperty, (g, e) => `WITH ${g.sql(e, "this")}`],
+    [exp.SampleProperty, (g, e) => `SAMPLE BY ${g.sql(e.args.this)}`],
+    [exp.SecurityProperty, (g, e) => `SECURITY ${g.sql(e.args.this)}`],
+    [exp.SharingProperty, (g, e) => `SHARING=${g.sql(e.args.this)}`],
+    [exp.SqlSecurityProperty, (g, e) => `SQL SECURITY ${g.sql(e.args.this)}`],
+    [exp.Stream, (g, e) => `STREAM ${g.sql(e.args.this)}`],
+    [exp.TitleColumnConstraint, (g, e) => `TITLE ${g.sql(e.args.this)}`],
+    [exp.ToMap, (g, e) => `MAP ${g.sql(e.args.this)}`],
+    [exp.ToTableProperty, (g, e) => `TO ${g.sql(e.this)}`],
+    [
+      exp.UsingTemplateProperty,
+      (g, e) => `USING TEMPLATE ${g.sql(e.args.this)}`,
+    ],
+    [exp.UsingData, (g, e) => `USING DATA ${g.sql(e.args.this)}`],
+    [exp.Variadic, (g, e) => `VARIADIC ${g.sql(e.args.this)}`],
+    [exp.ViewAttributeProperty, (g, e) => `WITH ${g.sql(e.args.this)}`],
     [
       exp.WithJournalTableProperty,
-      (g, e) => `WITH JOURNAL TABLE=${g.sql(e, "this")}`,
+      (g, e) => `WITH JOURNAL TABLE=${g.sql(e.args.this)}`,
     ],
     [
       exp.WithSchemaBindingProperty,
-      (g, e) => `WITH SCHEMA ${g.sql(e, "this")}`,
+      (g, e) => `WITH SCHEMA ${g.sql(e.args.this)}`,
     ],
 
     // Conditional properties
@@ -342,12 +387,12 @@ export class Generator {
     [
       exp.CharacterSetProperty,
       (g, e) =>
-        `${e.args.default ? "DEFAULT " : ""}CHARACTER SET=${g.sql(e, "this")}`,
+        `${e.args.default ? "DEFAULT " : ""}CHARACTER SET=${g.sql(e.args.this)}`,
     ],
     [
       exp.EphemeralColumnConstraint,
       (g, e) => {
-        const thisSql = g.sql(e, "this")
+        const thisSql = g.sql(e.args.this)
         return `EPHEMERAL${thisSql ? ` ${thisSql}` : ""}`
       },
     ],
@@ -408,30 +453,29 @@ export class Generator {
     ],
 
     // Misc expressions
-    [exp.AnalyzeColumns, (g, e) => g.sql(e, "this")],
+    [exp.AnalyzeColumns, (g, e) => g.sql(e.args.this)],
     [exp.AnalyzeWith, (g, e) => `WITH ${g.expressions(e.expressions, " ")}`],
     [
       exp.ExcludeColumnConstraint,
-      (g, e) => `EXCLUDE ${g.sql(e, "this").trimStart()}`,
+      (g, e) => `EXCLUDE ${g.sql(e.args.this).trimStart()}`,
     ],
-    [exp.NetFunc, (g, e) => `NET.${g.sql(e, "this")}`],
-    [exp.PivotAny, (g, e) => `ANY${g.sql(e, "this")}`],
-    [exp.SafeFunc, (g, e) => `SAFE.${g.sql(e, "this")}`],
-    [exp.SetConfigProperty, (g, e) => g.sql(e, "this")],
+    [exp.NetFunc, (g, e) => `NET.${g.sql(e.args.this)}`],
+    [exp.PivotAny, (g, e) => `ANY${g.sql(e.args.this)}`],
+    [exp.SafeFunc, (g, e) => `SAFE.${g.sql(e.args.this)}`],
+    [exp.SetConfigProperty, (g, e) => g.sql(e.args.this)],
     [
       exp.SettingsProperty,
       (g, e) => `SETTINGS ${g.expressions(e.expressions)}`,
     ],
-    [exp.SwapTable, (g, e) => `SWAP WITH ${g.sql(e, "this")}`],
-    [exp.TableColumn, (g, e) => g.sql(e.this as exp.Expression)],
-    [exp.WithOperator, (g, e) => `${g.sql(e, "this")} WITH ${g.sql(e, "op")}`],
+    [exp.SwapTable, (g, e) => `SWAP WITH ${g.sql(e.args.this)}`],
+    [exp.TableColumn, (g, e) => g.sql(e.this)],
+    [
+      exp.WithOperator,
+      (g, e) => `${g.sql(e.args.this)} WITH ${g.sql(e.args.op)}`,
+    ],
 
     // Interval
-    [
-      exp.IntervalSpan,
-      (g, e) =>
-        `${g.sql(e.this as exp.Expression)} TO ${g.sql(e.expression as exp.Expression)}`,
-    ],
+    [exp.IntervalSpan, (g, e) => `${g.sql(e.this)} TO ${g.sql(e.expression)}`],
 
     // Functions / casts
     [exp.Ceil, (g, e) => g.ceil_floor_sql(e as exp.Ceil)],
@@ -474,10 +518,7 @@ export class Generator {
         ]),
     ],
 
-    // Set operations
-    [exp.Except, (g, e) => g.set_operations_sql(e as exp.SetOperation)],
-    [exp.Intersect, (g, e) => g.set_operations_sql(e as exp.SetOperation)],
-    [exp.Union, (g, e) => g.set_operations_sql(e as exp.SetOperation)],
+    // Set operations are handled by auto-discovered methods: union_sql, except_sql, intersect_sql
 
     // UTC functions → CurrentDate/Time/Timestamp with "UTC" literal
     [
@@ -544,6 +585,7 @@ export class Generator {
   protected version: [number, number, number]
   private _nameCounter = 0
   private _escapedQuoteEnd = "''"
+  protected _quoteJsonPathKeyUsingBrackets = true
 
   // Instance transforms (merged with static)
   protected transforms: Map<ExpressionClass, Transform>
@@ -634,24 +676,12 @@ export class Generator {
     return `${sql} ${commentsSql}`
   }
 
-  sql(
-    expression: exp.Expression | string | undefined | null,
-    key?: string,
-  ): string {
-    if (!expression) return ""
+  sql(expression: ArgValue): string {
+    if (expression == null) return ""
     if (typeof expression === "string") return expression
-
-    // If key provided, extract that argument from expression
-    if (key) {
-      const value = expression.args[key]
-      if (value instanceof exp.Expression) {
-        return this.sql(value)
-      }
-      if (typeof value === "string") {
-        return value
-      }
-      return ""
-    }
+    if (typeof expression === "number" || typeof expression === "boolean")
+      return String(expression)
+    if (Array.isArray(expression)) return ""
 
     // 1. Check TRANSFORMS by constructor (class as key) - like Python
     const transform = this.transforms.get(
@@ -780,7 +810,7 @@ export class Generator {
   }
 
   // Hex strings: X'DEADBEEF' or 0xDEADBEEF
-  protected hexstring_sql(
+  hexstring_sql(
     expression: exp.HexString,
     binaryFunctionRepr?: string,
   ): string {
@@ -826,11 +856,11 @@ export class Generator {
   }
 
   protected booland_sql(expression: exp.Booland): string {
-    return `((${this.sql(expression, "this")}) AND (${this.sql(expression, "expression")}))`
+    return `((${this.sql(expression.args.this)}) AND (${this.sql(expression.args.expression)}))`
   }
 
   protected boolor_sql(expression: exp.Boolor): string {
-    return `((${this.sql(expression, "this")}) OR (${this.sql(expression, "expression")}))`
+    return `((${this.sql(expression.args.this)}) OR (${this.sql(expression.args.expression)}))`
   }
 
   // ==================== Column and Table ====================
@@ -839,20 +869,20 @@ export class Generator {
     const parts: string[] = []
 
     if (expression.catalog) {
-      parts.push(this.sql(expression.args.catalog as exp.Expression))
+      parts.push(this.sql(expression.args.catalog))
     }
     if (expression.db) {
-      parts.push(this.sql(expression.args.db as exp.Expression))
+      parts.push(this.sql(expression.args.db))
     }
     if (expression.table) {
-      parts.push(this.sql(expression.args.table as exp.Expression))
+      parts.push(this.sql(expression.args.table))
     }
 
     const col = expression.args.this
     if (col instanceof exp.Star) {
       parts.push("*")
     } else {
-      parts.push(this.sql(col as exp.Expression))
+      parts.push(this.sql(col))
     }
 
     return parts.join(".")
@@ -862,16 +892,16 @@ export class Generator {
     return this.column_sql(expression)
   }
 
-  protected table_sql(expression: exp.Table): string {
+  protected table_sql(expression: exp.Table, sep = " AS "): string {
     const parts: string[] = []
 
     if (expression.catalog) {
-      parts.push(this.sql(expression.args.catalog as exp.Expression))
+      parts.push(this.sql(expression.args.catalog))
     }
     if (expression.db) {
-      parts.push(this.sql(expression.args.db as exp.Expression))
+      parts.push(this.sql(expression.args.db))
     }
-    parts.push(this.sql(expression.args.this as exp.Expression))
+    parts.push(this.sql(expression.args.this))
 
     let result = parts.join(".")
 
@@ -897,7 +927,7 @@ export class Generator {
     // Generate alias (e.g., Table.alias = TableAlias)
     const alias = expression.args.alias
     if (alias instanceof exp.Expression) {
-      result += ` AS ${this.sql(alias)}`
+      result += `${sep}${this.sql(alias)}`
     }
 
     if (!this.ALIAS_POST_TABLESAMPLE && sampleSql) {
@@ -908,7 +938,7 @@ export class Generator {
     const pivots = expression.args.pivots
     if (Array.isArray(pivots)) {
       for (const pivot of pivots) {
-        result += ` ${this.sql(pivot as exp.Expression)}`
+        result += ` ${this.sql(pivot)}`
       }
     }
 
@@ -917,18 +947,19 @@ export class Generator {
 
   protected alias_sql(expression: exp.Alias): string {
     const inner = expression.args.this as exp.Expression
-    const expr = this.sql(inner)
-    const alias = this.sql(expression.args.alias as exp.Expression)
-    const sample = inner?.args?.sample
-    const sampleSql =
-      sample instanceof exp.TableSample ? this.tablesample_sql(sample) : ""
-    let result: string
-    if (this.ALIAS_POST_TABLESAMPLE && sampleSql) {
-      result = `${expr}${sampleSql} AS ${alias}`
-    } else {
-      result = `${expr} AS ${alias}${sampleSql}`
+    let sampleSql = ""
+    if (
+      !this.ALIAS_POST_TABLESAMPLE &&
+      inner instanceof exp.Subquery &&
+      inner.args.sample instanceof exp.TableSample
+    ) {
+      sampleSql = this.tablesample_sql(inner.args.sample)
+      inner.set("sample", undefined)
     }
-    return result
+    const expr = this.sql(inner)
+    const alias = this.sql(expression.args.alias)
+    const aliasSql = alias ? ` AS ${alias}` : ""
+    return `${expr}${aliasSql}${sampleSql}`
   }
 
   protected star_sql(expression: exp.Star): string {
@@ -953,6 +984,18 @@ export class Generator {
     string,
     (gen: Generator, e: exp.Expression) => string
   > = {
+    cluster: (gen, e) => {
+      const cluster = e.args.cluster
+      return cluster ? ` ${gen.sql(cluster)}` : ""
+    },
+    distribute: (gen, e) => {
+      const distribute = e.args.distribute
+      return distribute ? ` ${gen.sql(distribute)}` : ""
+    },
+    sort: (gen, e) => {
+      const sort = e.args.sort
+      return sort ? ` ${gen.sql(sort)}` : ""
+    },
     windows: (gen, e) => {
       const windows = e.args.windows
       if (Array.isArray(windows) && windows.length > 0) {
@@ -962,7 +1005,7 @@ export class Generator {
     },
     qualify: (gen, e) => {
       const qualify = e.args.qualify
-      return qualify ? ` ${gen.sql(qualify as exp.Expression)}` : ""
+      return qualify ? ` ${gen.sql(qualify)}` : ""
     },
   }
 
@@ -979,7 +1022,7 @@ export class Generator {
     const joins = expression.args.joins
     if (Array.isArray(joins)) {
       for (const join of joins) {
-        const joinSql = this.sql(join as exp.Expression)
+        const joinSql = this.sql(join)
         if (joinSql.startsWith(",")) {
           parts.push(parts.length > 0 ? parts.pop() + joinSql : joinSql)
         } else {
@@ -992,35 +1035,35 @@ export class Generator {
     const laterals = expression.args.laterals
     if (Array.isArray(laterals)) {
       for (const lateral of laterals) {
-        parts.push(this.sql(lateral as exp.Expression))
+        parts.push(this.sql(lateral))
       }
     }
 
     // MATCH_RECOGNIZE
     const matchExpr = expression.args.match
     if (matchExpr) {
-      const matchSql = this.sql(matchExpr as exp.Expression)
+      const matchSql = this.sql(matchExpr)
       if (matchSql) parts.push(matchSql)
     }
 
     // PREWHERE (ClickHouse)
     const prewhere = expression.args.prewhere
     if (prewhere) {
-      const prewhereSql = this.sql(prewhere as exp.Expression)
+      const prewhereSql = this.sql(prewhere)
       if (prewhereSql) parts.push(prewhereSql)
     }
 
     // WHERE
     const where = expression.args.where
-    if (where) parts.push(this.sql(where as exp.Expression))
+    if (where) parts.push(this.sql(where))
 
     // GROUP BY
     const group = expression.args.group
-    if (group) parts.push(this.sql(group as exp.Expression))
+    if (group) parts.push(this.sql(group))
 
     // HAVING
     const having = expression.args.having
-    if (having) parts.push(this.sql(having as exp.Expression))
+    if (having) parts.push(this.sql(having))
 
     // AFTER_HAVING modifiers (WINDOW defs, QUALIFY, etc.)
     for (const gen of Object.values(this.AFTER_HAVING_MODIFIER_TRANSFORMS)) {
@@ -1030,7 +1073,7 @@ export class Generator {
 
     // ORDER BY
     const order = expression.args.order
-    if (order) parts.push(this.sql(order as exp.Expression))
+    if (order) parts.push(this.sql(order))
 
     // LIMIT / FETCH conversion
     let limit = expression.args.limit as exp.Expression | undefined
@@ -1063,16 +1106,14 @@ export class Generator {
     const locks = expression.args.locks
     if (Array.isArray(locks)) {
       for (const lock of locks) {
-        const lockSql = this.sql(lock as exp.Expression)
+        const lockSql = this.sql(lock)
         if (lockSql) parts.push(lockSql)
       }
     }
 
-    // SAMPLE
-    const sample = expression.args.sample
-    if (sample instanceof exp.TableSample) {
-      parts.push(this.tablesample_sql(sample).trim())
-    }
+    // SAMPLE (after locks, matching Python's after_limit_modifiers)
+    const sampleSql = this.sql(expression.args.sample)
+    if (sampleSql) parts.push(sampleSql.trimStart())
 
     // OPTIONS (TSQL OPTION clause)
     const optionsMod = this.optionsModifier(expression)
@@ -1085,7 +1126,7 @@ export class Generator {
     return parts.join(this.pretty ? "\n" : " ")
   }
 
-  protected select_sql(expression: exp.Select): string {
+  select_sql(expression: exp.Select): string {
     // INTO handling
     const into = expression.args.into
     if (!this.features.SUPPORTS_SELECT_INTO && into) {
@@ -1099,14 +1140,14 @@ export class Generator {
         : ""
 
     // Hint
-    const hint = this.sql(expression, "hint")
+    const hint = this.sql(expression.args.hint)
 
     // SELECT [hint] [AS STRUCT/VALUE] [DISTINCT [ON (...)]] expressions
     const kind = expression.args.kind
       ? ` AS ${expression.args.kind as string}`
       : ""
     const distinct = expression.args.distinct
-      ? ` ${this.sql(expression.args.distinct as exp.Expression)}`
+      ? ` ${this.sql(expression.args.distinct)}`
       : ""
     const exprs = expression.expressions
     const rawExprsSql = exprs.length > 0 ? this.expressions(exprs) : "*"
@@ -1114,12 +1155,12 @@ export class Generator {
 
     // INTO
     const intoSql = expression.args.into
-      ? ` ${this.sql(expression.args.into as exp.Expression)}`
+      ? ` ${this.sql(expression.args.into)}`
       : ""
 
     // FROM
     const from = expression.args.from_
-    const fromSql = from ? ` ${this.sql(from as exp.Expression)}` : ""
+    const fromSql = from ? ` ${this.sql(from)}` : ""
 
     return (
       withSql +
@@ -1132,15 +1173,16 @@ export class Generator {
   }
 
   protected from_sql(expression: exp.From): string {
-    return `FROM ${this.sql(expression.args.this as exp.Expression)}`
+    return `FROM ${this.sql(expression.args.this)}`
   }
 
   protected where_sql(expression: exp.Where): string {
-    return `WHERE ${this.sql(expression.args.this as exp.Expression)}`
+    return `WHERE ${this.sql(expression.args.this)}`
   }
 
   protected group_sql(expression: exp.Group): string {
     const parts: string[] = []
+    const withParts: string[] = []
     const exprs = expression.expressions
     if (exprs.length > 0) {
       parts.push(this.expressions(exprs))
@@ -1151,13 +1193,31 @@ export class Generator {
     }
     const cube = expression.args.cube
     if (Array.isArray(cube)) {
-      parts.push(...cube.map((c: exp.Expression) => this.sql(c)))
+      for (const c of cube) {
+        const sql = this.sql(c)
+        if (sql.startsWith("WITH ")) {
+          withParts.push(sql)
+        } else {
+          parts.push(sql)
+        }
+      }
     }
     const rollup = expression.args.rollup
     if (Array.isArray(rollup)) {
-      parts.push(...rollup.map((r: exp.Expression) => this.sql(r)))
+      for (const r of rollup) {
+        const sql = this.sql(r)
+        if (sql.startsWith("WITH ")) {
+          withParts.push(sql)
+        } else {
+          parts.push(sql)
+        }
+      }
     }
-    return `GROUP BY ${parts.join(", ")}`
+    let result = `GROUP BY ${parts.join(", ")}`
+    if (withParts.length > 0) {
+      result += ` ${withParts.join(" ")}`
+    }
+    return result
   }
 
   protected cube_sql(expression: exp.Cube): string {
@@ -1175,21 +1235,21 @@ export class Generator {
   }
 
   protected having_sql(expression: exp.Having): string {
-    return `HAVING ${this.sql(expression.args.this as exp.Expression)}`
+    return `HAVING ${this.sql(expression.args.this)}`
   }
 
   protected qualify_sql(expression: exp.Qualify): string {
-    return `QUALIFY ${this.sql(expression.args.this as exp.Expression)}`
+    return `QUALIFY ${this.sql(expression.args.this)}`
   }
 
   protected into_sql(expression: exp.Into): string {
     const temporary = expression.args.temporary ? " TEMPORARY" : ""
     const unlogged = expression.args.unlogged ? " UNLOGGED" : ""
-    return `INTO${temporary || unlogged} ${this.sql(expression, "this")}`
+    return `INTO${temporary || unlogged} ${this.sql(expression.args.this)}`
   }
 
   protected prior_sql(expression: exp.Prior): string {
-    return `PRIOR ${this.sql(expression, "this")}`
+    return `PRIOR ${this.sql(expression.args.this)}`
   }
 
   protected prewhere_sql(_expression: exp.PreWhere): string {
@@ -1240,20 +1300,18 @@ export class Generator {
   }
 
   protected lateral_sql(expression: exp.Lateral): string {
-    const thisExpr = this.sql(expression, "this")
+    const thisExpr = this.sql(expression.args.this)
     if (expression.args.view) {
       const alias = expression.args.alias as exp.TableAlias
       const columns = alias
         ? this.expressions((alias.args.columns as exp.Expression[]) || [])
         : ""
-      const table = alias?.args.this
-        ? ` ${this.sql(alias.args.this as exp.Expression)}`
-        : ""
+      const table = alias?.args.this ? ` ${this.sql(alias.args.this)}` : ""
       const columnsSql = columns ? ` AS ${columns}` : ""
       const outer = expression.args.outer ? " OUTER" : ""
       return `LATERAL VIEW${outer} ${thisExpr}${table}${columnsSql}`
     }
-    const alias = this.sql(expression, "alias")
+    const alias = this.sql(expression.args.alias)
     const aliasSql = alias ? ` AS ${alias}` : ""
     const ordinality = expression.args.ordinality
     if (ordinality) {
@@ -1263,7 +1321,7 @@ export class Generator {
   }
 
   protected order_sql(expression: exp.Order): string {
-    const thisExpr = this.sql(expression, "this")
+    const thisExpr = this.sql(expression.args.this)
     const thisPrefix = thisExpr ? `${thisExpr} ` : ""
     const siblings = expression.args.siblings ? "SIBLINGS " : ""
     const exprs = expression.expressions
@@ -1281,7 +1339,7 @@ export class Generator {
     const nullsAreSmall = nullOrdering === "nulls_are_small"
     const nullsAreLast = nullOrdering === "nulls_are_last"
 
-    let thisSql = this.sql(expression.args.this as exp.Expression)
+    let thisSql = this.sql(expression.args.this)
 
     const sortOrder = desc ? " DESC" : desc === false ? " ASC" : ""
     let nullsSortChange = ""
@@ -1354,9 +1412,9 @@ export class Generator {
 
   protected limit_sql(expression: exp.Limit): string {
     const limitOptions = expression.args.limit_options
-      ? this.sql(expression.args.limit_options as exp.Expression)
+      ? this.sql(expression.args.limit_options)
       : ""
-    return `LIMIT ${this.sql(expression.args.this as exp.Expression)}${limitOptions}`
+    return `LIMIT ${this.sql(expression.args.this)}${limitOptions}`
   }
 
   protected limitoptions_sql(expression: exp.LimitOptions): string {
@@ -1368,15 +1426,15 @@ export class Generator {
   }
 
   protected offset_sql(expression: exp.Offset): string {
-    return `OFFSET ${this.sql(expression.args.this as exp.Expression)}`
+    return `OFFSET ${this.sql(expression.args.this)}`
   }
 
   protected fetch_sql(expression: exp.Fetch): string {
     const direction = expression.args.direction
     const dirStr = direction ? ` ${direction}` : ""
-    const count = this.sql(expression, "count")
+    const count = this.sql(expression.args.count)
     const countStr = count ? ` ${count}` : ""
-    const limitOptions = this.sql(expression, "limit_options")
+    const limitOptions = this.sql(expression.args.limit_options)
     const limitStr = limitOptions || " ROWS ONLY"
     return `FETCH${dirStr}${countStr}${limitStr}`
   }
@@ -1386,7 +1444,7 @@ export class Generator {
     isFetch: boolean,
     limit: exp.Expression | undefined,
   ): string[] {
-    const offsetSql = this.sql(expression, "offset")
+    const offsetSql = this.sql(expression.args.offset)
     const limitSql = limit ? this.sql(limit) : ""
     return isFetch ? [offsetSql, limitSql] : [limitSql, offsetSql]
   }
@@ -1404,7 +1462,7 @@ export class Generator {
       !expression.args.on &&
       !expression.args.using
     ) {
-      return `, ${this.sql(expression.args.this as exp.Expression)}`
+      return `, ${this.sql(expression.args.this)}`
     }
 
     const parts: string[] = []
@@ -1417,12 +1475,12 @@ export class Generator {
     if (kind) parts.push(String(kind))
     parts.push("JOIN")
 
-    parts.push(this.sql(expression.args.this as exp.Expression))
+    parts.push(this.sql(expression.args.this))
 
     const on = expression.args.on
     if (on) {
       parts.push("ON")
-      parts.push(this.sql(on as exp.Expression))
+      parts.push(this.sql(on))
     }
 
     const using = expression.args.using
@@ -1448,50 +1506,60 @@ export class Generator {
     return this.setOperation(expression, "INTERSECT")
   }
 
-  protected setOperation(expression: exp.SetOperation, op: string): string {
-    const left = this.sql(expression.args.this as exp.Expression)
-    const right = this.sql(expression.args.expression as exp.Expression)
+  protected setOperation(expression: exp.SetOperation, _op?: string): string {
+    const sqls: string[] = []
+    const stack: (string | exp.Expression)[] = [expression]
 
-    // distinct semantics:
-    // - undefined: default behavior (DISTINCT for UNION/EXCEPT/INTERSECT), don't add keyword
-    // - true: explicit DISTINCT, don't add keyword (it's default)
-    // - false: explicit ALL, add ALL keyword
-    const distinctOrAll = expression.args.distinct === false ? " ALL" : ""
-    const byName = expression.args.by_name ? " BY NAME" : ""
+    while (stack.length > 0) {
+      const node = stack.pop()!
+      if (node instanceof exp.SetOperation) {
+        stack.push(node.args.expression as exp.Expression)
+        const distinct = node.args.distinct
+        const distinctOrAll = distinct === false ? " ALL" : ""
+        const byName = node.args.by_name ? " BY NAME" : ""
+        const nodeOp = node.key.toUpperCase()
+        stack.push(`${nodeOp}${distinctOrAll}${byName}`)
+        stack.push(node.args.this as exp.Expression)
+      } else if (typeof node === "string") {
+        sqls.push(node)
+      } else {
+        sqls.push(this.sql(node))
+      }
+    }
 
-    return `${left} ${op}${distinctOrAll}${byName} ${right}`
+    let sql = sqls.join(" ")
+    sql = this.queryModifiers(expression, sql)
+    return this.prependCtes(expression, sql)
   }
 
   protected ceil_floor_sql(expression: exp.Ceil | exp.Floor): string {
     const func = expression.key === "ceil" ? "CEIL" : "FLOOR"
-    return `${func}(${this.sql(expression.this as exp.Expression)})`
+    return `${func}(${this.sql(expression.this)})`
   }
 
-  protected set_operations_sql(expression: exp.SetOperation): string {
-    const op = expression.key.toUpperCase()
-    const left = this.sql(expression.this as exp.Expression)
-    const right = this.sql(expression.expression as exp.Expression)
-
-    const distinct = expression.args.distinct
-    let distinctOrAll = ""
-    if (distinct === true) {
-      distinctOrAll = " DISTINCT"
-    } else if (distinct === false) {
-      distinctOrAll = " ALL"
-    }
-
-    const byName = expression.args.by_name ? " BY NAME" : ""
-
-    return `${left} ${op}${distinctOrAll}${byName} ${right}`
-  }
-
-  protected subquery_sql(expression: exp.Subquery): string {
-    const inner = this.sql(expression.args.this as exp.Expression)
+  protected subquery_sql(expression: exp.Subquery, sep = " AS "): string {
+    const inner = this.sql(expression.args.this)
+    let sql = `(${inner})`
     const alias = expression.args.alias
-    if (alias) {
-      return `(${inner}) AS ${this.sql(alias as exp.Expression)}`
+    const aliasSql = alias ? `${sep}${this.sql(alias)}` : ""
+    const sample = expression.args.sample
+    const sampleSql =
+      sample instanceof exp.TableSample ? this.tablesample_sql(sample) : ""
+    if (this.ALIAS_POST_TABLESAMPLE && sampleSql) {
+      sql += `${sampleSql}${aliasSql}`
+      expression.set("sample", undefined)
+    } else {
+      sql += aliasSql
     }
-    return `(${inner})`
+    sql = this.queryModifiers(expression, sql)
+    sql = this.prependCtes(expression, sql)
+    const pivots = expression.args.pivots as exp.Expression[] | undefined
+    if (pivots) {
+      for (const p of pivots) {
+        sql += ` ${this.sql(p)}`
+      }
+    }
+    return sql
   }
 
   // Table sample keyword - override in dialects
@@ -1536,7 +1604,7 @@ export class Generator {
 
     // Simplified pivot (DuckDB): has `this` set (the table)
     if (expression.args.this) {
-      const thisExpr = this.sql(expression.args.this as exp.Expression)
+      const thisExpr = this.sql(expression.args.this)
       if (!expressionsSql) {
         return `UNPIVOT ${thisExpr}`
       }
@@ -1563,7 +1631,7 @@ export class Generator {
   }
 
   protected aliases_sql(expression: exp.Aliases): string {
-    return `${this.sql(expression, "this")} AS (${this.expressions(expression.expressions)})`
+    return `${this.sql(expression.args.this)} AS (${this.expressions(expression.expressions)})`
   }
 
   // ==================== Binary Operations ====================
@@ -1713,7 +1781,7 @@ export class Generator {
     let sql = this.binary_sql(expression, op)
     const escapeExpr = expression.args.escape
     if (escapeExpr) {
-      sql += ` ESCAPE ${this.sql(escapeExpr as exp.Expression)}`
+      sql += ` ESCAPE ${this.sql(escapeExpr)}`
     }
     return sql
   }
@@ -1825,16 +1893,20 @@ export class Generator {
   }
 
   protected bitwisenot_sql(expression: exp.BitwiseNot): string {
-    return `~${this.sql(expression.args.this as exp.Expression)}`
+    return `~${this.sql(expression.args.this)}`
   }
 
   // Regex LIKE operators
   protected regexplike_sql(expression: exp.RegexpLike): string {
-    return `REGEXPLIKE(${this.sql(expression.args.this as exp.Expression)}, ${this.sql(expression.args.expression as exp.Expression)})`
+    const flag = this.sql(expression.args.flag)
+    const flagStr = flag ? `, ${flag}` : ""
+    return `REGEXP_LIKE(${this.sql(expression.args.this)}, ${this.sql(expression.args.expression)}${flagStr})`
   }
 
   protected regexpilike_sql(expression: exp.RegexpILike): string {
-    return `REGEXPILIKE(${this.sql(expression.args.this as exp.Expression)}, ${this.sql(expression.args.expression as exp.Expression)})`
+    const flag = this.sql(expression.args.flag)
+    const flagStr = flag ? `, ${flag}` : ""
+    return `REGEXP_ILIKE(${this.sql(expression.args.this)}, ${this.sql(expression.args.expression)}${flagStr})`
   }
 
   // MatchAgainst (text search - MySQL MATCH...AGAINST or Postgres @@)
@@ -1843,18 +1915,18 @@ export class Generator {
     const exprs = expressions
       ? expressions.map((e) => this.sql(e)).join(", ")
       : ""
-    const thisVal = this.sql(expression.args.this as exp.Expression)
+    const thisVal = this.sql(expression.args.this)
     return `MATCH_AGAINST(${thisVal}, ${exprs})`
   }
 
   // Default SUBSTRING output (comma-separated args)
   protected substring_sql(expression: exp.Substring): string {
-    const args: string[] = [this.sql(expression.args.this as exp.Expression)]
+    const args: string[] = [this.sql(expression.args.this)]
     if (expression.args.start) {
-      args.push(this.sql(expression.args.start as exp.Expression))
+      args.push(this.sql(expression.args.start))
     }
     if (expression.args.length) {
-      args.push(this.sql(expression.args.length as exp.Expression))
+      args.push(this.sql(expression.args.length))
     }
     return `SUBSTRING(${args.join(", ")})`
   }
@@ -1862,15 +1934,15 @@ export class Generator {
   // ==================== Unary Operations ====================
 
   protected not_sql(expression: exp.Not): string {
-    return `NOT ${this.sql(expression.args.this as exp.Expression)}`
+    return `NOT ${this.sql(expression.args.this)}`
   }
 
   protected neg_sql(expression: exp.Neg): string {
-    return `-${this.sql(expression.args.this as exp.Expression)}`
+    return `-${this.sql(expression.args.this)}`
   }
 
   protected paren_sql(expression: exp.Paren): string {
-    return `(${this.sql(expression.args.this as exp.Expression)})`
+    return `(${this.sql(expression.args.this)})`
   }
 
   protected all_sql(expression: exp.All): string {
@@ -1892,24 +1964,29 @@ export class Generator {
   }
 
   protected exists_sql(expression: exp.Exists): string {
-    return `EXISTS(${this.sql(expression.args.this as exp.Expression)})`
+    return `EXISTS(${this.sql(expression.args.this)})`
   }
 
   // ==================== Special Predicates ====================
 
   protected between_sql(expression: exp.Between): string {
-    const val = this.sql(expression.args.this as exp.Expression)
-    const low = this.sql(expression.args.low as exp.Expression)
-    const high = this.sql(expression.args.high as exp.Expression)
+    const val = this.sql(expression.args.this)
+    const low = this.sql(expression.args.low)
+    const high = this.sql(expression.args.high)
     return `${val} BETWEEN ${low} AND ${high}`
   }
 
   protected in_sql(expression: exp.In): string {
-    const val = this.sql(expression.args.this as exp.Expression)
+    const val = this.sql(expression.args.this)
 
     const query = expression.args.query
     if (query) {
-      return `${val} IN ${this.sql(query as exp.Expression)}`
+      return `${val} IN ${this.sql(query)}`
+    }
+
+    const unnest = expression.args.unnest
+    if (unnest instanceof exp.Expression) {
+      return `${val} IN ${this.inUnnestOp(unnest)}`
     }
 
     const field = expression.args.field
@@ -1919,6 +1996,10 @@ export class Generator {
 
     const exprs = expression.expressions
     return `${val} IN (${this.expressions(exprs)})`
+  }
+
+  protected inUnnestOp(unnest: exp.Expression): string {
+    return `(SELECT ${this.sql(unnest)})`
   }
 
   // ==================== Functions ====================
@@ -1936,7 +2017,7 @@ export class Generator {
   }
 
   protected abs_sql(expression: exp.Abs): string {
-    return `ABS(${this.sql(expression.args.this as exp.Expression)})`
+    return `ABS(${this.sql(expression.args.this)})`
   }
 
   protected space_sql(expression: exp.Space): string {
@@ -1998,7 +2079,7 @@ export class Generator {
     const subquery = expression.args.this
     if (subquery instanceof exp.Subquery) {
       const inner = subquery.args.this
-      return `ARRAY(${this.sql(inner as exp.Expression)})`
+      return `ARRAY(${this.sql(inner)})`
     }
 
     // For ARRAY[...], use brackets (Postgres style)
@@ -2117,14 +2198,14 @@ export class Generator {
 
   // PropertyEQ for named parameters: name := value
   protected propertyeq_sql(expression: exp.PropertyEQ): string {
-    const left = this.sql(expression.args.this as exp.Expression)
-    const right = this.sql(expression.args.expression as exp.Expression)
+    const left = this.sql(expression.args.this)
+    const right = this.sql(expression.args.expression)
     return `${left} := ${right}`
   }
 
   protected summarize_sql(expression: exp.Summarize): string {
     const table = expression.args.table ? " TABLE" : ""
-    return `SUMMARIZE${table} ${this.sql(expression.args.this as exp.Expression)}`
+    return `SUMMARIZE${table} ${this.sql(expression.args.this)}`
   }
 
   protected count_sql(expression: exp.Count): string {
@@ -2132,7 +2213,7 @@ export class Generator {
 
     const val = expression.args.this
     if (val) {
-      return `COUNT(${distinct}${this.sql(val as exp.Expression)})`
+      return `COUNT(${distinct}${this.sql(val)})`
     }
 
     const exprs = expression.expressions
@@ -2161,7 +2242,7 @@ export class Generator {
 
   protected aggFunc(name: string, expression: exp.AggFunc): string {
     const distinct = expression.args.distinct ? "DISTINCT " : ""
-    const val = this.sql(expression.args.this as exp.Expression)
+    const val = this.sql(expression.args.this)
     return `${name}(${distinct}${val})`
   }
 
@@ -2172,15 +2253,15 @@ export class Generator {
 
     const subject = expression.args.this
     if (subject) {
-      parts.push(this.sql(subject as exp.Expression))
+      parts.push(this.sql(subject))
     }
 
     const ifs = expression.args.ifs
     if (Array.isArray(ifs)) {
       for (const if_ of ifs) {
         const ifExpr = if_ as exp.If
-        const cond = this.sql(ifExpr.args.this as exp.Expression)
-        const then = this.sql(ifExpr.args.true as exp.Expression)
+        const cond = this.sql(ifExpr.args.this)
+        const then = this.sql(ifExpr.args.true)
         parts.push(`WHEN ${cond} THEN ${then}`)
       }
     }
@@ -2188,7 +2269,7 @@ export class Generator {
     const default_ = expression.args.default
     if (default_) {
       parts.push("ELSE")
-      parts.push(this.sql(default_ as exp.Expression))
+      parts.push(this.sql(default_))
     }
 
     parts.push("END")
@@ -2207,14 +2288,14 @@ export class Generator {
   // ==================== Cast ====================
 
   protected cast_sql(expression: exp.Cast): string {
-    const expr = this.sql(expression.args.this as exp.Expression)
-    const to = this.sql(expression.args.to as exp.Expression)
+    const expr = this.sql(expression.args.this)
+    const to = this.sql(expression.args.to)
     return `CAST(${expr} AS ${to})`
   }
 
   protected trycast_sql(expression: exp.TryCast): string {
-    const expr = this.sql(expression.args.this as exp.Expression)
-    const to = this.sql(expression.args.to as exp.Expression)
+    const expr = this.sql(expression.args.this)
+    const to = this.sql(expression.args.to)
     return `TRY_CAST(${expr} AS ${to})`
   }
 
@@ -2310,8 +2391,8 @@ export class Generator {
         interior = exprs
           .map((e) => {
             if (e instanceof exp.ColumnDef) {
-              const name = this.sql(e.args.this as exp.Expression)
-              const kind = this.sql(e.args.kind as exp.Expression)
+              const name = this.sql(e.args.this)
+              const kind = this.sql(e.args.kind)
               return `${name} ${kind}`
             }
             return this.sql(e)
@@ -2352,7 +2433,7 @@ export class Generator {
   }
 
   protected datatypeparam_sql(expression: exp.DataTypeParam): string {
-    return this.sql(expression.args.this as exp.Expression)
+    return this.sql(expression.args.this)
   }
 
   // ==================== JSON Operators ====================
@@ -2374,10 +2455,8 @@ export class Generator {
   // ==================== Window Functions ====================
 
   protected window_sql(expression: exp.Window): string {
-    const func = this.sql(expression.args.this as exp.Expression)
-    const alias = expression.args.alias
-      ? this.sql(expression.args.alias as exp.Expression)
-      : ""
+    const func = this.sql(expression.args.this)
+    const alias = expression.args.alias ? this.sql(expression.args.alias) : ""
 
     const parts: string[] = []
 
@@ -2388,12 +2467,12 @@ export class Generator {
 
     const order = expression.args.order
     if (order) {
-      parts.push(this.sql(order as exp.Expression))
+      parts.push(this.sql(order))
     }
 
     const spec = expression.args.spec
     if (spec) {
-      parts.push(this.sql(spec as exp.Expression))
+      parts.push(this.sql(spec))
     }
 
     const windowSpec = `(${parts.join(" ")})`
@@ -2436,7 +2515,7 @@ export class Generator {
   }
 
   protected ignorenulls_sql(expression: exp.IgnoreNulls): string {
-    const inner = this.sql(expression.args.this as exp.Expression)
+    const inner = this.sql(expression.args.this)
     if (this.features.IGNORE_NULLS_IN_FUNC) {
       return this.embedIgnoreNulls(expression, "IGNORE NULLS")
     }
@@ -2444,7 +2523,7 @@ export class Generator {
   }
 
   protected respectnulls_sql(expression: exp.RespectNulls): string {
-    const inner = this.sql(expression.args.this as exp.Expression)
+    const inner = this.sql(expression.args.this)
     if (this.features.IGNORE_NULLS_IN_FUNC) {
       return this.embedIgnoreNulls(expression, "RESPECT NULLS")
     }
@@ -2488,24 +2567,27 @@ export class Generator {
         name === "PERCENTILE_CONT"
           ? new exp.PercentileCont({ this: quantile })
           : new exp.PercentileDisc({ this: quantile })
-      const withinGroup = new exp.WithinGroup({ this: func, expression: order })
+      const withinGroup = new exp.WithinGroup({
+        this: func,
+        expression: order,
+      })
       return this.withingroup_sql(withinGroup)
     }
     return this.funcCall(name, [thisExpr])
   }
 
   protected withingroup_sql(expression: exp.WithinGroup): string {
-    const func = this.sql(expression.args.this as exp.Expression)
+    const func = this.sql(expression.args.this)
     const order = expression.args.expression
     if (order) {
-      return `${func} WITHIN GROUP (${this.sql(order as exp.Expression)})`
+      return `${func} WITHIN GROUP (${this.sql(order)})`
     }
     return `${func} WITHIN GROUP ()`
   }
 
   protected filter_sql(expression: exp.Filter): string {
     if (this.features.AGGREGATE_FILTER_SUPPORTED) {
-      const func = this.sql(expression.args.this as exp.Expression)
+      const func = this.sql(expression.args.this)
       const whereExpr = expression.args.expression as exp.Expression
       const where = this.sql(whereExpr).trim()
       return `${func} FILTER(${where})`
@@ -2521,7 +2603,7 @@ export class Generator {
 
   protected lambda_sql(expression: exp.Lambda): string {
     const params = expression.expressions
-    const body = this.sql(expression.args.this as exp.Expression)
+    const body = this.sql(expression.args.this)
     const useColon = expression.args.colon
 
     if (useColon) {
@@ -2538,11 +2620,11 @@ export class Generator {
 
   // List comprehension: [x FOR x IN l IF condition]
   protected comprehension_sql(expression: exp.Comprehension): string {
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
-    const expr = this.sql(expression.args.expression as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
+    const expr = this.sql(expression.args.expression)
     const positionExpr = expression.args.position as exp.Expression | undefined
     const position = positionExpr ? `, ${this.sql(positionExpr)}` : ""
-    const iterator = this.sql(expression.args.iterator as exp.Expression)
+    const iterator = this.sql(expression.args.iterator)
     const conditionExpr = expression.args.condition as
       | exp.Expression
       | undefined
@@ -2551,27 +2633,47 @@ export class Generator {
   }
 
   protected properties_sql(expression: exp.Properties): string {
-    return expression.expressions.map((p) => this.sql(p)).join(" ")
+    const rootProps: exp.Expression[] = []
+    const withProps: exp.Expression[] = []
+    for (const p of expression.expressions) {
+      if (this.isRootProperty(p)) {
+        rootProps.push(p)
+      } else {
+        withProps.push(p)
+      }
+    }
+    const rootSql = rootProps.map((p) => this.sql(p)).join(" ")
+    let withSql = ""
+    if (withProps.length > 0) {
+      const inner = withProps.map((p) => this.sql(p)).join(", ")
+      withSql = `${this.WITH_PROPERTIES_PREFIX} (${inner})`
+    }
+    if (rootSql && withSql) return `${rootSql} ${withSql}`
+    return rootSql || withSql
+  }
+
+  protected isRootProperty(_p: exp.Expression): boolean {
+    return false
   }
 
   protected partitionedbyproperty_sql(
     expression: exp.PartitionedByProperty,
   ): string {
-    return `PARTITIONED BY ${this.sql(expression.args.this as exp.Expression)}`
+    return `PARTITIONED BY ${this.sql(expression.args.this)}`
   }
 
   protected fileformatproperty_sql(expression: exp.FileFormatProperty): string {
-    return `USING ${this.sql(expression.args.this as exp.Expression)}`
+    return `USING ${this.sql(expression.args.this)}`
   }
 
   protected schemacommentproperty_sql(
     expression: exp.SchemaCommentProperty,
   ): string {
-    return `COMMENT ${this.sql(expression.args.this as exp.Expression)}`
+    return `COMMENT ${this.sql(expression.args.this)}`
   }
 
   protected sortkeyproperty_sql(expression: exp.SortKeyProperty): string {
-    return `SORT BY ${this.sql(expression.args.this as exp.Expression)}`
+    return `SORT BY ${this.sql(expression.args.this)}`
   }
 
   protected clusteredbyproperty_sql(
@@ -2615,7 +2717,7 @@ export class Generator {
   }
 
   protected bracket_sql(expression: exp.Bracket): string {
-    const base = this.sql(expression.args.this as exp.Expression)
+    const base = this.sql(expression.args.this)
     const indices = this.bracketOffsetExpressions(expression)
     return `${base}[${this.expressions(indices)}]`
   }
@@ -2634,7 +2736,7 @@ export class Generator {
         : kind
           ? `${kind} `
           : ""
-    const thisStr = this.sql(expression.args.this as exp.Expression)
+    const thisStr = this.sql(expression.args.this)
     return `${kindStr}${thisStr}`
   }
 
@@ -2642,9 +2744,9 @@ export class Generator {
   protected PARAMETER_TOKEN = "@"
 
   protected historicaldata_sql(expression: exp.HistoricalData): string {
-    const thisStr = this.sql(expression.args.this as exp.Expression)
-    const kind = this.sql(expression.args.kind as exp.Expression)
-    const expr = this.sql(expression.args.expression as exp.Expression)
+    const thisStr = this.sql(expression.args.this)
+    const kind = this.sql(expression.args.kind)
+    const expr = this.sql(expression.args.expression)
     return `${thisStr} (${kind} => ${expr})`
   }
 
@@ -2672,7 +2774,7 @@ export class Generator {
     if (embedded) {
       result = result.replace(/\0(\d+)/g, (_match, idx) => {
         const expr = embedded[Number(idx)]
-        return expr ? `(${this.sql(expr.args.this as exp.Expression)})` : ""
+        return expr ? `(${this.sql(expr.args.this)})` : ""
       })
     }
     const withExpr = expression.args.with_
@@ -2683,14 +2785,14 @@ export class Generator {
   }
 
   protected copyparameter_sql(expression: exp.CopyParameter): string {
-    const option = this.sql(expression.args.this as exp.Expression)
-    const value = this.sql(expression.args.expression as exp.Expression)
+    const option = this.sql(expression.args.this)
+    const value = this.sql(expression.args.expression)
     if (!value) return option
     return `${option} ${value}`
   }
 
   protected schema_sql(expression: exp.Schema): string {
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
     const exprs = expression.expressions
     const columnsSql = exprs.length > 0 ? `(${this.expressions(exprs)})` : ""
     if (thisExpr && columnsSql) return `${thisExpr} ${columnsSql}`
@@ -2698,7 +2800,7 @@ export class Generator {
   }
 
   protected copy_sql(expression: exp.Copy): string {
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
     const thisStr = this.COPY_HAS_INTO_KEYWORD
       ? ` INTO ${thisExpr}`
       : ` ${thisExpr}`
@@ -2716,12 +2818,13 @@ export class Generator {
   }
 
   protected COPY_HAS_INTO_KEYWORD = true
+  protected WITH_PROPERTIES_PREFIX = "WITH"
 
   protected create_sql(expression: exp.Create): string {
     const kind = expression.args.kind as string
     const replace = expression.args.replace ? " OR REPLACE" : ""
     const exists = expression.args.exists ? " IF NOT EXISTS" : ""
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
 
     let body = this.sql(
       expression.args.expression as exp.Expression | undefined,
@@ -2739,7 +2842,7 @@ export class Generator {
   protected userdefinedfunction_sql(
     expression: exp.UserDefinedFunction,
   ): string {
-    const name = this.sql(expression.args.this as exp.Expression)
+    const name = this.sql(expression.args.this)
     const exprs = expression.expressions
     if (expression.args.wrapped && exprs.length > 0) {
       return `${name}(${this.expressions(exprs)})`
@@ -2751,9 +2854,9 @@ export class Generator {
   }
 
   protected columndef_sql(expression: exp.ColumnDef): string {
-    const column = this.sql(expression, "this")
+    const column = this.sql(expression.args.this)
     const exists = expression.args.exists ? "IF NOT EXISTS " : ""
-    let kind = this.sql(expression, "kind")
+    let kind = this.sql(expression.args.kind)
     kind = kind ? ` ${kind}` : ""
 
     const constraints = this.expressions(expression, {
@@ -2763,7 +2866,7 @@ export class Generator {
     })
     const constraintsSql = constraints ? ` ${constraints}` : ""
 
-    const position = this.sql(expression, "position")
+    const position = this.sql(expression.args.position)
     const positionSql = position ? ` ${position}` : ""
 
     if (
@@ -2847,8 +2950,8 @@ export class Generator {
   }
 
   protected attimezone_sql(expression: exp.AtTimeZone): string {
-    const this_ = this.sql(expression.args.this as exp.Expression)
-    const zone = this.sql(expression.args.zone as exp.Expression)
+    const this_ = this.sql(expression.args.this)
+    const zone = this.sql(expression.args.zone)
     return `${this_} AT TIME ZONE ${zone}`
   }
 
@@ -2862,20 +2965,20 @@ export class Generator {
 
   protected extract_sql(expression: exp.Extract): string {
     const unit = expression.text("this")
-    const expr = this.sql(expression.args.expression as exp.Expression)
+    const expr = this.sql(expression.args.expression)
     return `EXTRACT(${unit} FROM ${expr})`
   }
 
   protected distinct_sql(expression: exp.Distinct): string {
     const exprs = expression.expressions
     const exprsSql = exprs.length > 0 ? ` ${this.expressions(exprs)}` : ""
-    const on = this.sql(expression, "on")
+    const on = this.sql(expression.args.on)
     const onSql = on ? ` ON ${on}` : ""
     return `DISTINCT${exprsSql}${onSql}`
   }
 
   protected tablealias_sql(expression: exp.TableAlias): string {
-    let alias = this.sql(expression.args.this as exp.Expression)
+    let alias = this.sql(expression.args.this)
     const columns = expression.args.columns as exp.Expression[] | undefined
     if (columns && columns.length > 0) {
       if (!alias) {
@@ -2887,8 +2990,8 @@ export class Generator {
   }
 
   protected cte_sql(expression: exp.CTE): string {
-    const alias = this.sql(expression.args.alias as exp.Expression)
-    const query = this.sql(expression.args.this as exp.Expression)
+    const alias = this.sql(expression.args.alias)
+    const query = this.sql(expression.args.this)
 
     const keyExprs = expression.args.key_expressions as
       | exp.Expression[]
@@ -2915,8 +3018,8 @@ export class Generator {
   }
 
   protected xmlkeyvalueoption_sql(expression: exp.XMLKeyValueOption): string {
-    const this_ = this.sql(expression, "this")
-    const expr = this.sql(expression, "expression")
+    const this_ = this.sql(expression.args.this)
+    const expr = this.sql(expression.args.expression)
     return `${this_}${expr ? `(${expr})` : ""}`
   }
 
@@ -2939,8 +3042,18 @@ export class Generator {
 
   protected values_sql(expression: exp.Values): string {
     const args = this.expressions(expression.expressions)
-    const values = `VALUES ${args}`
-    return this.queryModifiers(expression, values)
+    const alias = this.sql(expression.args.alias)
+    let values = `VALUES ${args}`
+    if (
+      this.features.WRAP_DERIVED_VALUES &&
+      (alias ||
+        expression.parent instanceof exp.From ||
+        expression.parent instanceof exp.Table)
+    ) {
+      values = `(${values})`
+    }
+    values = this.queryModifiers(expression, values)
+    return alias ? `${values} AS ${alias}` : values
   }
 
   protected with_sql(expression: exp.With): string {
@@ -2965,8 +3078,12 @@ export class Generator {
   protected HEX_LOWERCASE = false
   protected PAD_FILL_PATTERN_IS_REQUIRED = false
   protected TRY_SUPPORTED = true
-  protected ON_CONDITION_EMPTY_BEFORE_ERROR = false
+  protected ON_CONDITION_EMPTY_BEFORE_ERROR = true
   protected LOG_BASE_FIRST: boolean | null = true
+  protected QUOTE_JSON_PATH = true
+  protected JSON_KEY_VALUE_PAIR_SEP = ":"
+  protected JSON_PATH_SINGLE_QUOTE_ESCAPE = false
+  protected JSON_PATH_BRACKETED_KEY_SUPPORTED = true
 
   protected alter_sql(expression: exp.Alter): string {
     const actions = expression.args.actions as exp.Expression[] | undefined
@@ -2993,19 +3110,19 @@ export class Generator {
     }
 
     const exists = expression.args.exists ? " IF EXISTS" : ""
-    const onCluster = this.sql(expression, "cluster")
+    const onCluster = this.sql(expression.args.cluster)
     const onClusterSql = onCluster ? ` ${onCluster}` : ""
     const only = expression.args.only ? " ONLY" : ""
     const options = this.expressions(expression, { key: "options" })
     const optionsSql = options ? `, ${options}` : ""
-    const kind = this.sql(expression, "kind")
+    const kind = this.sql(expression.args.kind)
     const notValid = expression.args.not_valid ? " NOT VALID" : ""
     const check = expression.args.check ? " WITH CHECK" : ""
     const cascade =
       expression.args.cascade && this.features.ALTER_TABLE_SUPPORTS_CASCADE
         ? " CASCADE"
         : ""
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     const thisClause = thisSql ? ` ${thisSql}` : ""
 
     return `ALTER ${kind}${exists}${only}${thisClause}${onClusterSql}${check} ${actionsSql}${notValid}${optionsSql}${cascade}`
@@ -3036,7 +3153,7 @@ export class Generator {
         expr = new exp.AlterRename({ this: nameOnly })
       }
     }
-    const thisSql = this.sql(expr, "this")
+    const thisSql = this.sql(expr.args.this)
     return `RENAME TO ${thisSql}`
   }
 
@@ -3047,7 +3164,7 @@ export class Generator {
   protected INSERT_OVERWRITE = " OVERWRITE TABLE"
 
   protected prependCtes(expression: exp.Expression, sql: string): string {
-    const with_ = this.sql(expression, "with_")
+    const with_ = this.sql(expression.args.with_)
     if (with_) {
       return `${with_} ${sql}`
     }
@@ -3073,17 +3190,17 @@ export class Generator {
   }
 
   protected delete_sql(expression: exp.Delete): string {
-    const this_ = this.sql(expression, "this")
+    const this_ = this.sql(expression.args.this)
     const thisSql = this_ ? ` FROM ${this_}` : ""
     const using = this.expressionsFromKey(expression, "using")
     const usingSql = using ? ` USING ${using}` : ""
-    const where = this.sql(expression, "where")
+    const where = this.sql(expression.args.where)
     const whereSql = where ? ` ${where}` : ""
-    const returning = this.sql(expression, "returning")
+    const returning = this.sql(expression.args.returning)
     const returningSql = returning ? ` ${returning}` : ""
-    const order = this.sql(expression, "order")
+    const order = this.sql(expression.args.order)
     const orderSql = order ? ` ${order}` : ""
-    const limit = this.sql(expression, "limit")
+    const limit = this.sql(expression.args.limit)
     const limitSql = limit ? ` ${limit}` : ""
     const tables = this.expressionsFromKey(expression, "tables")
     const tablesSql = tables ? ` ${tables}` : ""
@@ -3098,7 +3215,7 @@ export class Generator {
   }
 
   protected drop_sql(expression: exp.Drop): string {
-    const this_ = this.sql(expression, "this")
+    const this_ = this.sql(expression.args.this)
     const expressionsSql = this.expressionsFromKey(expression, "expressions")
     const exprsSql = expressionsSql ? ` (${expressionsSql})` : ""
     const kind = String(expression.args.kind ?? "")
@@ -3120,17 +3237,17 @@ export class Generator {
     const ignore = expression.args.ignore ? " IGNORE" : ""
     const isFunction = expression.args.is_function
     const funcSql = isFunction ? " FUNCTION" : ""
-    const thisSql = `${this_}${funcSql} ${this.sql(expression, "this")}`
+    const thisSql = `${this_}${funcSql} ${this.sql(expression.args.this)}`
 
     const exists = expression.args.exists ? " IF EXISTS" : ""
     const byName = expression.args.by_name ? " BY NAME" : ""
     const defaultValues = expression.args.default ? " DEFAULT VALUES" : ""
 
-    const expressionBody = this.sql(expression, "expression")
+    const expressionBody = this.sql(expression.args.expression)
     const expressionSql = expressionBody ? ` ${expressionBody}` : ""
-    const onConflict = this.sql(expression, "conflict")
+    const onConflict = this.sql(expression.args.conflict)
     const onConflictSql = onConflict ? ` ${onConflict}` : ""
-    const returning = this.sql(expression, "returning")
+    const returning = this.sql(expression.args.returning)
     const returningSql = returning ? ` ${returning}` : ""
 
     let bodySql: string
@@ -3140,7 +3257,7 @@ export class Generator {
       bodySql = `${returningSql}${expressionSql}${onConflictSql}`
     }
 
-    const partition = this.sql(expression, "partition")
+    const partition = this.sql(expression.args.partition)
     const partitionSql = partition ? ` ${partition}` : ""
 
     return this.prependCtes(
@@ -3154,7 +3271,7 @@ export class Generator {
       ? "ON DUPLICATE KEY"
       : "ON CONFLICT"
 
-    const constraint = this.sql(expression, "constraint")
+    const constraint = this.sql(expression.args.constraint)
     const constraintSql = constraint ? ` ON CONSTRAINT ${constraint}` : ""
 
     let conflictKeys = this.expressionsFromKey(expression, "conflict_keys")
@@ -3162,7 +3279,7 @@ export class Generator {
       conflictKeys = `(${conflictKeys})`
     }
 
-    const indexPredicate = this.sql(expression, "index_predicate")
+    const indexPredicate = this.sql(expression.args.index_predicate)
     const conflictKeysSql = `${conflictKeys}${indexPredicate} `
 
     const action = expression.args.action
@@ -3174,24 +3291,24 @@ export class Generator {
       ? ` ${this.DUPLICATE_KEY_UPDATE_WITH_SET ? "SET " : ""}${expressionsSql}`
       : ""
 
-    const where = this.sql(expression, "where")
+    const where = this.sql(expression.args.where)
     const whereSql = where ? ` ${where}` : ""
 
     return `${conflict}${constraintSql} ${conflictKeysSql}${action}${exprSql}${whereSql}`
   }
 
   protected update_sql(expression: exp.Update): string {
-    const this_ = this.sql(expression, "this")
+    const this_ = this.sql(expression.args.this)
     const setSql = this.expressionsFromKey(expression, "expressions")
-    const from = this.sql(expression, "from_")
+    const from = this.sql(expression.args.from_)
     const fromSql = from ? ` ${from}` : ""
-    const where = this.sql(expression, "where")
+    const where = this.sql(expression.args.where)
     const whereSql = where ? ` ${where}` : ""
-    const returning = this.sql(expression, "returning")
+    const returning = this.sql(expression.args.returning)
     const returningSql = returning ? ` ${returning}` : ""
-    const order = this.sql(expression, "order")
+    const order = this.sql(expression.args.order)
     const orderSql = order ? ` ${order}` : ""
-    const limit = this.sql(expression, "limit")
+    const limit = this.sql(expression.args.limit)
     const limitSql = limit ? ` ${limit}` : ""
 
     let expressionSql: string
@@ -3211,21 +3328,21 @@ export class Generator {
   // ==================== Transaction / Grant / Misc Statements ====================
 
   protected use_sql(expression: exp.Use): string {
-    const kind = this.sql(expression, "kind")
+    const kind = this.sql(expression.args.kind)
     const kindSql = kind ? ` ${kind}` : ""
     const this_ =
-      this.sql(expression, "this") ||
+      this.sql(expression.args.this) ||
       this.expressionsFromKey(expression, "expressions")
     const thisSql = this_ ? ` ${this_}` : ""
     return `USE${kindSql}${thisSql}`
   }
 
   protected comment_sql(expression: exp.Comment): string {
-    const this_ = this.sql(expression, "this")
+    const this_ = this.sql(expression.args.this)
     const kind = String(expression.args.kind ?? "")
     const materialized = expression.args.materialized ? " MATERIALIZED" : ""
     const exists = expression.args.exists ? " IF EXISTS " : " "
-    const expressionSql = this.sql(expression, "expression")
+    const expressionSql = this.sql(expression.args.expression)
     return `COMMENT${exists}ON${materialized} ${kind} ${this_} IS ${expressionSql}`
   }
 
@@ -3233,9 +3350,9 @@ export class Generator {
     const target = expression.args.is_database ? "DATABASE" : "TABLE"
     const tables = ` ${this.expressions(expression.expressions)}`
     const exists = expression.args.exists ? " IF EXISTS" : ""
-    const identity = this.sql(expression, "identity")
+    const identity = this.sql(expression.args.identity)
     const identitySql = identity ? ` ${identity} IDENTITY` : ""
-    const option = this.sql(expression, "option")
+    const option = this.sql(expression.args.option)
     const optionSql = option ? ` ${option}` : ""
     return `TRUNCATE ${target}${exists}${tables}${identitySql}${optionSql}`
   }
@@ -3244,16 +3361,14 @@ export class Generator {
     const name = expression.name
     const full = expression.args.full ? " FULL" : ""
     const terse = expression.args.terse ? " TERSE" : ""
-    const target = this.sql(expression, "target")
+    const target = this.sql(expression.args.target)
     const targetSql = target ? ` ${target}` : ""
     const like = expression.args.like
-      ? ` LIKE ${this.sql(expression.args.like as exp.Expression)}`
+      ? ` LIKE ${this.sql(expression.args.like)}`
       : ""
-    const db = expression.args.db
-      ? ` IN ${this.sql(expression.args.db as exp.Expression)}`
-      : ""
+    const db = expression.args.db ? ` IN ${this.sql(expression.args.db)}` : ""
     const where = expression.args.where
-      ? ` ${this.sql(expression.args.where as exp.Expression)}`
+      ? ` ${this.sql(expression.args.where)}`
       : ""
     return `SHOW${full}${terse} ${name}${targetSql}${like}${db}${where}`
   }
@@ -3264,39 +3379,39 @@ export class Generator {
       sep: " ",
     })
     const optionsSql = options ? ` ${options}` : ""
-    const kind = this.sql(expression, "kind")
+    const kind = this.sql(expression.args.kind)
     const kindSql = kind ? ` ${kind}` : ""
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     const thisClause = thisSql ? ` ${thisSql}` : ""
-    const mode = this.sql(expression, "mode")
+    const mode = this.sql(expression.args.mode)
     const modeSql = mode ? ` ${mode}` : ""
-    const properties = this.sql(expression, "properties")
+    const properties = this.sql(expression.args.properties)
     const propertiesSql = properties ? ` ${properties}` : ""
-    const partition = this.sql(expression, "partition")
+    const partition = this.sql(expression.args.partition)
     const partitionSql = partition ? ` ${partition}` : ""
-    const innerExpression = this.sql(expression, "expression")
+    const innerExpression = this.sql(expression.args.expression)
     const innerExpressionSql = innerExpression ? ` ${innerExpression}` : ""
     return `ANALYZE${optionsSql}${kindSql}${thisClause}${partitionSql}${modeSql}${innerExpressionSql}${propertiesSql}`
   }
 
   protected altercolumn_sql(expression: exp.AlterColumn): string {
-    const thisSql = this.sql(expression, "this")
-    const dtype = this.sql(expression, "dtype")
+    const thisSql = this.sql(expression.args.this)
+    const dtype = this.sql(expression.args.dtype)
     if (dtype) {
       const collate = expression.args.collate
-        ? ` COLLATE ${this.sql(expression.args.collate as exp.Expression)}`
+        ? ` COLLATE ${this.sql(expression.args.collate)}`
         : ""
       const using = expression.args.using
-        ? ` USING ${this.sql(expression.args.using as exp.Expression)}`
+        ? ` USING ${this.sql(expression.args.using)}`
         : ""
       const alterSetType = this.ALTER_SET_TYPE ? `${this.ALTER_SET_TYPE} ` : ""
       return `ALTER COLUMN ${thisSql} ${alterSetType}${dtype}${collate}${using}`
     }
-    const defaultVal = this.sql(expression, "default")
+    const defaultVal = this.sql(expression.args.default)
     if (defaultVal) {
       return `ALTER COLUMN ${thisSql} SET DEFAULT ${defaultVal}`
     }
-    const comment = this.sql(expression, "comment")
+    const comment = this.sql(expression.args.comment)
     if (comment) {
       return `ALTER COLUMN ${thisSql} COMMENT ${comment}`
     }
@@ -3336,25 +3451,23 @@ export class Generator {
 
   protected rollback_sql(expression: exp.Rollback): string {
     const savepoint = expression.args.savepoint
-    const savepointSql = savepoint
-      ? ` TO ${this.sql(savepoint as exp.Expression)}`
-      : ""
+    const savepointSql = savepoint ? ` TO ${this.sql(savepoint)}` : ""
     return `ROLLBACK${savepointSql}`
   }
 
   protected grant_sql(expression: exp.Grant): string {
     const privileges = this.expressionsFromKey(expression, "privileges")
     const kind = expression.args.kind ? ` ${String(expression.args.kind)}` : ""
-    const securable = this.sql(expression, "securable")
+    const securable = this.sql(expression.args.securable)
     const principals = this.expressionsFromKey(expression, "principals")
     const grantOption = expression.args.grant_option ? " WITH GRANT OPTION" : ""
     return `GRANT ${privileges} ON${kind} ${securable} TO ${principals}${grantOption}`
   }
 
   protected merge_sql(expression: exp.Merge): string {
-    const this_ = this.sql(expression, "this")
-    const using = `USING ${this.sql(expression, "using")}`
-    const on = this.sql(expression, "on")
+    const this_ = this.sql(expression.args.this)
+    const using = `USING ${this.sql(expression.args.using)}`
+    const on = this.sql(expression.args.on)
     let onSql = on ? `ON ${on}` : ""
     if (!onSql) {
       const usingCond = this.expressionsFromKey(expression, "using_cond")
@@ -3362,8 +3475,8 @@ export class Generator {
         onSql = `USING (${usingCond})`
       }
     }
-    const whens = this.sql(expression, "whens")
-    const returning = this.sql(expression, "returning")
+    const whens = this.sql(expression.args.whens)
+    const returning = this.sql(expression.args.returning)
     const returningSql = returning ? ` ${returning}` : ""
     return this.prependCtes(
       expression,
@@ -3375,18 +3488,21 @@ export class Generator {
     return expression.expressions.map((e) => this.sql(e)).join(" ")
   }
 
+  protected MATCHED_BY_SOURCE = true
+
   protected when_sql(expression: exp.When): string {
     const matched = expression.args.matched ? "MATCHED" : "NOT MATCHED"
-    const source = expression.args.source ? " BY SOURCE" : ""
-    const condition = this.sql(expression, "condition")
+    const source =
+      this.MATCHED_BY_SOURCE && expression.args.source ? " BY SOURCE" : ""
+    const condition = this.sql(expression.args.condition)
     const conditionSql = condition ? ` AND ${condition}` : ""
 
     const thenExpr = expression.args.then as exp.Expression | undefined
     let then: string
     if (thenExpr instanceof exp.Insert) {
-      const this_ = this.sql(thenExpr, "this")
+      const this_ = this.sql(thenExpr.args.this)
       const thisSql = this_ ? `INSERT ${this_}` : "INSERT"
-      const valExpr = this.sql(thenExpr, "expression")
+      const valExpr = this.sql(thenExpr.args.expression)
       then = valExpr ? `${thisSql} VALUES ${valExpr}` : thisSql
     } else if (thenExpr instanceof exp.Update) {
       const expressionsSql = this.expressionsFromKey(thenExpr, "expressions")
@@ -3455,9 +3571,9 @@ export class Generator {
   protected matchrecognizemeasure_sql(
     expression: exp.MatchRecognizeMeasure,
   ): string {
-    const windowFrame = this.sql(expression, "window_frame")
+    const windowFrame = this.sql(expression.args.window_frame)
     const windowFrameSql = windowFrame ? `${windowFrame} ` : ""
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     return `${windowFrameSql}${thisSql}`
   }
 
@@ -3487,16 +3603,16 @@ export class Generator {
         : `MEASURES ${measuresContent}`
       : ""
 
-    const rowsSql = this.sql(expression, "rows")
-    const afterSql = this.sql(expression, "after")
+    const rowsSql = this.sql(expression.args.rows)
+    const afterSql = this.sql(expression.args.after)
 
-    const patternSql = this.sql(expression, "pattern")
+    const patternSql = this.sql(expression.args.pattern)
     const pattern = patternSql ? `PATTERN (${patternSql})` : ""
 
     const defines = expression.args.define as exp.Expression[] | undefined
     const definitionSqls = (defines ?? []).map(
       (d: exp.Expression) =>
-        `${this.sql(d, "alias")} AS ${this.sql(d, "this")}`,
+        `${this.sql(d.args.alias)} AS ${this.sql(d.args.this)}`,
     )
     const definitions = definitionSqls.length
       ? this.expressions(undefined, { sqls: definitionSqls })
@@ -3517,7 +3633,7 @@ export class Generator {
       define,
     ].filter(Boolean)
 
-    const alias = this.sql(expression, "alias")
+    const alias = this.sql(expression.args.alias)
     const aliasSql = alias ? ` ${alias}` : ""
 
     if (this.pretty) {
@@ -3570,7 +3686,7 @@ export class Generator {
       expression.args.this as exp.Expression,
       expression.expression as exp.Expression,
     ]
-    const fillPatternSql = this.sql(expression, "fill_pattern")
+    const fillPatternSql = this.sql(expression.args.fill_pattern)
     if (fillPatternSql) {
       args.push(expression.args.fill_pattern as exp.Expression)
     } else if (this.PAD_FILL_PATTERN_IS_REQUIRED) {
@@ -3613,7 +3729,7 @@ export class Generator {
   protected try_sql(expression: exp.Try): string {
     if (!this.TRY_SUPPORTED) {
       this.unsupported("Unsupported TRY function")
-      return this.sql(expression, "this")
+      return this.sql(expression.args.this)
     }
     return this.funcCall("TRY", [expression.args.this as exp.Expression])
   }
@@ -3653,10 +3769,10 @@ export class Generator {
   }
 
   protected overlay_sql(expression: exp.Overlay): string {
-    const thisSql = this.sql(expression, "this")
-    const exprSql = this.sql(expression, "expression")
-    const fromSql = this.sql(expression, "from_")
-    const forSql = this.sql(expression, "for_")
+    const thisSql = this.sql(expression.args.this)
+    const exprSql = this.sql(expression.args.expression)
+    const fromSql = this.sql(expression.args.from_)
+    const forSql = this.sql(expression.args.for_)
     const forPart = forSql ? ` FOR ${forSql}` : ""
     return `OVERLAY(${thisSql} PLACING ${exprSql} FROM ${fromSql}${forPart})`
   }
@@ -3682,9 +3798,9 @@ export class Generator {
   }
 
   protected inputoutputformat_sql(expression: exp.InputOutputFormat): string {
-    const inputFormat = this.sql(expression, "input_format")
+    const inputFormat = this.sql(expression.args.input_format)
     const inputSql = inputFormat ? `INPUTFORMAT ${inputFormat}` : ""
-    const outputFormat = this.sql(expression, "output_format")
+    const outputFormat = this.sql(expression.args.output_format)
     const outputSql = outputFormat ? `OUTPUTFORMAT ${outputFormat}` : ""
     return [inputSql, outputSql].filter(Boolean).join(this.sep())
   }
@@ -3692,14 +3808,14 @@ export class Generator {
   // ==================== DDL / Constraints ====================
 
   protected constraint_sql(expression: exp.Constraint): string {
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     const exprsSql = this.expressions(expression, { flat: true })
     return `CONSTRAINT ${thisSql} ${exprsSql}`
   }
 
   protected columnconstraint_sql(expression: exp.ColumnConstraint): string {
-    const thisSql = this.sql(expression, "this")
-    const kindSql = this.sql(expression, "kind").trim()
+    const thisSql = this.sql(expression.args.this)
+    const kindSql = this.sql(expression.args.kind).trim()
     return thisSql ? `CONSTRAINT ${thisSql} ${kindSql}` : kindSql
   }
 
@@ -3710,18 +3826,18 @@ export class Generator {
   }
 
   protected check_sql(expression: exp.Check): string {
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     return `CHECK (${thisSql})`
   }
 
   protected foreignkey_sql(expression: exp.ForeignKey): string {
     let exprsSql = this.expressions(expression, { flat: true })
     exprsSql = exprsSql ? ` (${exprsSql})` : ""
-    const reference = this.sql(expression, "reference")
+    const reference = this.sql(expression.args.reference)
     const referenceSql = reference ? ` ${reference}` : ""
-    const deleteSql = this.sql(expression, "delete")
+    const deleteSql = this.sql(expression.args.delete)
     const deleteClause = deleteSql ? ` ON DELETE ${deleteSql}` : ""
-    const updateSql = this.sql(expression, "update")
+    const updateSql = this.sql(expression.args.update)
     const updateClause = updateSql ? ` ON UPDATE ${updateSql}` : ""
     const options = this.expressions(expression, {
       key: "options",
@@ -3733,10 +3849,10 @@ export class Generator {
   }
 
   protected primarykey_sql(expression: exp.PrimaryKey): string {
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     const thisClause = thisSql ? ` ${thisSql}` : ""
     const exprsSql = this.expressions(expression, { flat: true })
-    const include = this.sql(expression, "include")
+    const include = this.sql(expression.args.include)
     const options = this.expressions(expression, {
       key: "options",
       flat: true,
@@ -3752,20 +3868,20 @@ export class Generator {
 
   protected renamecolumn_sql(expression: exp.RenameColumn): string {
     const exists = expression.args.exists ? " IF EXISTS" : ""
-    const oldColumn = this.sql(expression, "this")
-    const newColumn = this.sql(expression, "to")
+    const oldColumn = this.sql(expression.args.this)
+    const newColumn = this.sql(expression.args.to)
     return `RENAME COLUMN${exists} ${oldColumn} TO ${newColumn}`
   }
 
   protected columnposition_sql(expression: exp.ColumnPosition): string {
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     const thisClause = thisSql ? ` ${thisSql}` : ""
-    const position = this.sql(expression, "position")
+    const position = this.sql(expression.args.position)
     return `${position}${thisClause}`
   }
 
   protected columnprefix_sql(expression: exp.ColumnPrefix): string {
-    return `${this.sql(expression, "this")}(${this.sql(expression, "expression")})`
+    return `${this.sql(expression.args.this)}(${this.sql(expression.args.expression)})`
   }
 
   protected partition_sql(expression: exp.Partition): string {
@@ -3777,28 +3893,28 @@ export class Generator {
     const unique = expression.args.unique ? "UNIQUE " : ""
     const primary = expression.args.primary ? "PRIMARY " : ""
     const amp = expression.args.amp ? "AMP " : ""
-    let name = this.sql(expression, "this")
+    let name = this.sql(expression.args.this)
     name = name ? `${name} ` : ""
-    const table = this.sql(expression, "table")
+    const table = this.sql(expression.args.table)
     const tableSql = table ? `${this.INDEX_ON} ${table}` : ""
     const index = !tableSql ? "INDEX " : ""
-    const params = this.sql(expression, "params")
+    const params = this.sql(expression.args.params)
     return `${unique}${primary}${amp}${index}${name}${tableSql}${params}`
   }
 
   protected indexconstraintoption_sql(
     expression: exp.IndexConstraintOption,
   ): string {
-    const keyBlockSize = this.sql(expression, "key_block_size")
+    const keyBlockSize = this.sql(expression.args.key_block_size)
     if (keyBlockSize) return `KEY_BLOCK_SIZE = ${keyBlockSize}`
 
-    const using = this.sql(expression, "using")
+    const using = this.sql(expression.args.using)
     if (using) return `USING ${using}`
 
-    const parser = this.sql(expression, "parser")
+    const parser = this.sql(expression.args.parser)
     if (parser) return `WITH PARSER ${parser}`
 
-    const comment = this.sql(expression, "comment")
+    const comment = this.sql(expression.args.comment)
     if (comment) return `COMMENT ${comment}`
 
     const visible = expression.args.visible
@@ -3806,10 +3922,10 @@ export class Generator {
       return visible ? "VISIBLE" : "INVISIBLE"
     }
 
-    const engineAttr = this.sql(expression, "engine_attr")
+    const engineAttr = this.sql(expression.args.engine_attr)
     if (engineAttr) return `ENGINE_ATTRIBUTE = ${engineAttr}`
 
-    const secondaryEngineAttr = this.sql(expression, "secondary_engine_attr")
+    const secondaryEngineAttr = this.sql(expression.args.secondary_engine_attr)
     if (secondaryEngineAttr)
       return `SECONDARY_ENGINE_ATTRIBUTE = ${secondaryEngineAttr}`
 
@@ -3817,7 +3933,7 @@ export class Generator {
   }
 
   protected clone_sql(expression: exp.Clone): string {
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     const shallow = expression.args.shallow ? "SHALLOW " : ""
     const keyword =
       expression.args.copy && this.features.SUPPORTS_TABLE_COPY
@@ -3828,10 +3944,10 @@ export class Generator {
 
   protected characterset_sql(expression: exp.CharacterSet): string {
     if (expression.parent instanceof exp.Cast) {
-      return `CHAR CHARACTER SET ${this.sql(expression, "this")}`
+      return `CHAR CHARACTER SET ${this.sql(expression.args.this)}`
     }
     const defaultStr = expression.args.default ? "DEFAULT " : ""
-    return `${defaultStr}CHARACTER SET=${this.sql(expression, "this")}`
+    return `${defaultStr}CHARACTER SET=${this.sql(expression.args.this)}`
   }
 
   protected collate_sql(expression: exp.Collate): string {
@@ -3842,7 +3958,7 @@ export class Generator {
   }
 
   protected attach_sql(expression: exp.Attach): string {
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     const existsSql = expression.args.exists ? " IF NOT EXISTS" : ""
     const exprsSql = this.expressions(expression)
     const exprsClause = exprsSql ? ` (${exprsSql})` : ""
@@ -3850,14 +3966,14 @@ export class Generator {
   }
 
   protected detach_sql(expression: exp.Detach): string {
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     const existsSql = expression.args.exists ? " DATABASE IF EXISTS" : ""
     return `DETACH${existsSql} ${thisSql}`
   }
 
   protected attachoption_sql(expression: exp.AttachOption): string {
-    const thisSql = this.sql(expression, "this")
-    const value = this.sql(expression, "expression")
+    const thisSql = this.sql(expression.args.this)
+    const value = this.sql(expression.args.expression)
     const valueSql = value ? ` ${value}` : ""
     return `${thisSql}${valueSql}`
   }
@@ -3870,19 +3986,19 @@ export class Generator {
 
   protected addpartition_sql(expression: exp.AddPartition): string {
     const exists = expression.args.exists ? "IF NOT EXISTS " : ""
-    const location = this.sql(expression, "location")
+    const location = this.sql(expression.args.location)
     const locationSql = location ? ` ${location}` : ""
-    return `ADD ${exists}${this.sql(expression.args.this as exp.Expression)}${locationSql}`
+    return `ADD ${exists}${this.sql(expression.args.this)}${locationSql}`
   }
 
   protected alterindex_sql(expression: exp.AlterIndex): string {
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     const visibleSql = expression.args.visible ? "VISIBLE" : "INVISIBLE"
     return `ALTER INDEX ${thisSql} ${visibleSql}`
   }
 
   protected alterdiststyle_sql(expression: exp.AlterDistStyle): string {
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     if (!(expression.args.this instanceof exp.Var)) {
       return `ALTER DISTSTYLE KEY DISTKEY ${thisSql}`
     }
@@ -3891,7 +4007,7 @@ export class Generator {
 
   protected altersortkey_sql(expression: exp.AlterSortKey): string {
     const compound = expression.args.compound ? " COMPOUND" : ""
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     let exprsSql = this.expressions(expression, { flat: true })
     exprsSql = exprsSql ? `(${exprsSql})` : ""
     return `ALTER${compound} SORTKEY ${thisSql || exprsSql}`
@@ -3900,16 +4016,20 @@ export class Generator {
   protected describe_sql(expression: exp.Describe): string {
     const style = expression.args.style
     const styleSql = style ? ` ${style}` : ""
-    const partition = this.sql(expression, "partition")
+    const partition = this.sql(expression.args.partition)
     const partitionSql = partition ? ` ${partition}` : ""
-    const format = this.sql(expression, "format")
+    const format = this.sql(expression.args.format)
     const formatSql = format ? ` ${format}` : ""
     const asJson = expression.args.as_json ? " AS JSON" : ""
-    return `DESCRIBE${styleSql}${formatSql} ${this.sql(expression, "this")}${partitionSql}${asJson}`
+    return `DESCRIBE${styleSql}${formatSql} ${this.sql(expression.args.this)}${partitionSql}${asJson}`
   }
 
   protected cluster_sql(expression: exp.Cluster): string {
     return this.op_expressions("CLUSTER BY", expression)
+  }
+
+  protected sort_sql(expression: exp.Sort): string {
+    return this.op_expressions("SORT BY", expression)
   }
 
   protected distribute_sql(expression: exp.Distribute): string {
@@ -3917,13 +4037,13 @@ export class Generator {
   }
 
   protected pragma_sql(expression: exp.Pragma): string {
-    return `PRAGMA ${this.sql(expression, "this")}`
+    return `PRAGMA ${this.sql(expression.args.this)}`
   }
 
   protected version_sql(expression: exp.Version): string {
     const thisVal = `FOR ${expression.name}`
     const kind = expression.text("kind")
-    const expr = this.sql(expression, "expression")
+    const expr = this.sql(expression.args.expression)
     return `${thisVal} ${kind} ${expr}`
   }
 
@@ -3938,17 +4058,17 @@ export class Generator {
   }
 
   protected declareitem_sql(expression: exp.DeclareItem): string {
-    const variable = this.sql(expression, "this")
-    const defaultVal = this.sql(expression, "default")
+    const variable = this.sql(expression.args.this)
+    const defaultVal = this.sql(expression.args.default)
     const defaultSql = defaultVal ? ` = ${defaultVal}` : ""
-    const kind = this.sql(expression, "kind")
+    const kind = this.sql(expression.args.kind)
     const kindSql =
       expression.args.kind instanceof exp.Schema ? `TABLE ${kind}` : kind
     return `${variable} AS ${kindSql}${defaultSql}`
   }
 
   protected currentdate_sql(expression: exp.CurrentDate): string {
-    const zone = this.sql(expression, "this")
+    const zone = this.sql(expression.args.this)
     return zone ? `CURRENT_DATE(${zone})` : "CURRENT_DATE"
   }
 
@@ -3964,8 +4084,8 @@ export class Generator {
   }
 
   protected anyvalue_sql(expression: exp.AnyValue): string {
-    let thisSql = this.sql(expression, "this")
-    const having = this.sql(expression, "having")
+    let thisSql = this.sql(expression.args.this)
+    const having = this.sql(expression.args.having)
     if (having) {
       thisSql = `${thisSql} HAVING ${expression.args.max ? "MAX" : "MIN"} ${having}`
     }
@@ -3973,69 +4093,221 @@ export class Generator {
   }
 
   protected apply_sql(expression: exp.Apply): string {
-    const thisSql = this.sql(expression, "this")
-    const expr = this.sql(expression, "expression")
+    const thisSql = this.sql(expression.args.this)
+    const expr = this.sql(expression.args.expression)
     return `${thisSql} APPLY(${expr})`
   }
 
   protected atindex_sql(expression: exp.AtIndex): string {
-    const thisSql = this.sql(expression, "this")
-    const index = this.sql(expression, "expression")
+    const thisSql = this.sql(expression.args.this)
+    const index = this.sql(expression.args.expression)
     return `${thisSql} AT ${index}`
   }
 
   protected chr_sql(expression: exp.Chr): string {
     const thisSql = this.expressions(expression.expressions)
-    const charset = this.sql(expression, "charset")
+    const charset = this.sql(expression.args.charset)
     const using = charset ? ` USING ${charset}` : ""
     return `CHR(${thisSql}${using})`
   }
 
   protected jsonkeyvalue_sql(expression: exp.JSONKeyValue): string {
-    return `${this.sql(expression, "this")}: ${this.sql(expression, "expression")}`
+    return `${this.sql(expression.args.this)}${this.JSON_KEY_VALUE_PAIR_SEP} ${this.sql(expression.args.expression)}`
+  }
+
+  protected jsonpath_sql(expression: exp.JSONPath): string {
+    let path = this.expressions(expression, { sep: "", flat: true }).replace(
+      /^\./,
+      "",
+    )
+
+    if (expression.args.escape) {
+      path = this.escape_str(path)
+    }
+
+    if (this.QUOTE_JSON_PATH) {
+      path = `'${path}'`
+    }
+
+    return path
+  }
+
+  json_path_part(expression: string | number | exp.JSONPathPart): string {
+    if (expression instanceof exp.JSONPathPart) {
+      const transform = this.transforms.get(
+        expression.constructor as ExpressionClass,
+      )
+      if (typeof transform !== "function") {
+        this.unsupported(
+          `Unsupported JSONPathPart type ${expression.constructor.name}`,
+        )
+        return ""
+      }
+      return transform(this, expression)
+    }
+
+    if (typeof expression === "number") {
+      return String(expression)
+    }
+
+    if (
+      this._quoteJsonPathKeyUsingBrackets &&
+      this.JSON_PATH_SINGLE_QUOTE_ESCAPE
+    ) {
+      const escaped = expression.replace(/'/g, "\\'")
+      return `\\'${escaped}\\'`
+    }
+
+    const escaped = expression.replace(/"/g, '\\"')
+    return `"${escaped}"`
+  }
+
+  jsonpathkey_sql(expression: exp.JSONPathKey): string {
+    const thisVal = expression.args.this
+    if (thisVal instanceof exp.JSONPathWildcard) {
+      const part = this.json_path_part(thisVal)
+      return part ? `.${part}` : ""
+    }
+
+    if (typeof thisVal === "string" && /^[_a-zA-Z]\w*$/.test(thisVal)) {
+      return `.${thisVal}`
+    }
+
+    const part = this.json_path_part(
+      thisVal as string | number | exp.JSONPathPart,
+    )
+    return this._quoteJsonPathKeyUsingBrackets &&
+      this.JSON_PATH_BRACKETED_KEY_SUPPORTED
+      ? `[${part}]`
+      : `.${part}`
+  }
+
+  jsonpathsubscript_sql(expression: exp.JSONPathSubscript): string {
+    const part = this.json_path_part(
+      expression.args.this as string | number | exp.JSONPathPart,
+    )
+    return part ? `[${part}]` : ""
+  }
+
+  protected formatjson_sql(expression: exp.FormatJson): string {
+    return `${this.sql(expression.args.this)} FORMAT JSON`
+  }
+
+  protected jsonobject_sql(
+    expression: exp.JSONObject | exp.JSONObjectAgg,
+  ): string {
+    const nullHandling = expression.args.null_handling
+    const nullHandlingSql = nullHandling ? ` ${nullHandling}` : ""
+
+    const uniqueKeys = expression.args.unique_keys
+    let uniqueKeysSql = ""
+    if (uniqueKeys !== undefined && uniqueKeys !== null) {
+      uniqueKeysSql = uniqueKeys ? " WITH UNIQUE KEYS" : " WITHOUT UNIQUE KEYS"
+    }
+
+    const returnType = this.sql(expression.args.return_type)
+    const returnTypeSql = returnType ? ` RETURNING ${returnType}` : ""
+    const encoding = this.sql(expression.args.encoding)
+    const encodingSql = encoding ? ` ENCODING ${encoding}` : ""
+
+    const name =
+      expression instanceof exp.JSONObject ? "JSON_OBJECT" : "JSON_OBJECTAGG"
+    const argsSql = this.expressions(expression.expressions)
+    return `${this.normalizeFunc(name)}(${argsSql}${nullHandlingSql}${uniqueKeysSql}${returnTypeSql}${encodingSql})`
+  }
+
+  protected jsonobjectagg_sql(expression: exp.JSONObjectAgg): string {
+    return this.jsonobject_sql(expression)
+  }
+
+  protected jsonarray_sql(expression: exp.JSONArray): string {
+    const nullHandling = expression.args.null_handling
+    const nullHandlingSql = nullHandling ? ` ${nullHandling}` : ""
+    const returnType = this.sql(expression.args.return_type)
+    const returnTypeSql = returnType ? ` RETURNING ${returnType}` : ""
+    const strict = expression.args.strict ? " STRICT" : ""
+    const argsSql = this.expressions(expression.expressions)
+    return `${this.normalizeFunc("JSON_ARRAY")}(${argsSql}${nullHandlingSql}${returnTypeSql}${strict})`
+  }
+
+  protected jsonarrayagg_sql(expression: exp.JSONArrayAgg): string {
+    const thisSql = this.sql(expression.args.this)
+    const order = this.sql(expression.args.order)
+    const nullHandling = expression.args.null_handling
+    const nullHandlingSql = nullHandling ? ` ${nullHandling}` : ""
+    const returnType = this.sql(expression.args.return_type)
+    const returnTypeSql = returnType ? ` RETURNING ${returnType}` : ""
+    const strict = expression.args.strict ? " STRICT" : ""
+    return `${this.normalizeFunc("JSON_ARRAYAGG")}(${thisSql}${order ? ` ${order}` : ""}${nullHandlingSql}${returnTypeSql}${strict})`
+  }
+
+  protected jsonvalue_sql(expression: exp.JSONValue): string {
+    const path = this.sql(expression.args.path)
+    const returning = this.sql(expression.args.returning)
+    const returningSql = returning ? ` RETURNING ${returning}` : ""
+
+    const onCondition = this.sql(expression.args.on_condition)
+    const onConditionSql = onCondition ? ` ${onCondition}` : ""
+
+    return `${this.normalizeFunc("JSON_VALUE")}(${this.sql(expression.args.this)}, ${path}${returningSql}${onConditionSql})`
+  }
+
+  protected jsonexists_sql(expression: exp.JSONExists): string {
+    const thisSql = this.sql(expression.args.this)
+    const path = this.sql(expression.args.path)
+
+    const passing = this.expressions(expression, { key: "passing" })
+    const passingSql = passing ? ` PASSING ${passing}` : ""
+
+    const onCondition = this.sql(expression.args.on_condition)
+    const onConditionSql = onCondition ? ` ${onCondition}` : ""
+
+    const pathSql = `${path}${passingSql}${onConditionSql}`
+
+    return `${this.normalizeFunc("JSON_EXISTS")}(${thisSql}, ${pathSql})`
   }
 
   protected revoke_sql(expression: exp.Revoke): string {
     const privileges = this.expressionsFromKey(expression, "privileges")
     const kind = expression.args.kind ? ` ${String(expression.args.kind)}` : ""
-    const securable = this.sql(expression, "securable")
+    const securable = this.sql(expression.args.securable)
     const principals = this.expressionsFromKey(expression, "principals")
     const grantOption = expression.args.grant_option ? "GRANT OPTION FOR " : ""
-    const cascade = this.sql(expression, "cascade")
+    const cascade = this.sql(expression.args.cascade)
     const cascadeSql = cascade ? ` ${cascade}` : ""
     return `REVOKE ${grantOption}${privileges} ON${kind} ${securable} FROM ${principals}${cascadeSql}`
   }
 
   protected grantprivilege_sql(expression: exp.GrantPrivilege): string {
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     const columns = this.expressions(expression, { flat: true })
     const columnsSql = columns ? `(${columns})` : ""
     return `${thisSql}${columnsSql}`
   }
 
   protected grantprincipal_sql(expression: exp.GrantPrincipal): string {
-    const thisSql = this.sql(expression, "this")
-    const kind = this.sql(expression, "kind")
+    const thisSql = this.sql(expression.args.this)
+    const kind = this.sql(expression.args.kind)
     const kindSql = kind ? `${kind} ` : ""
     return `${kindSql}${thisSql}`
   }
 
   protected cache_sql(expression: exp.Cache): string {
     const lazy = expression.args.lazy ? " LAZY" : ""
-    const table = this.sql(expression, "this")
+    const table = this.sql(expression.args.this)
     const options = expression.args.options as exp.Expression[] | undefined
     const optionsSql =
       options && options.length >= 2
         ? ` OPTIONS(${this.sql(options[0])} = ${this.sql(options[1])})`
         : ""
-    const exprSql = this.sql(expression, "expression")
+    const exprSql = this.sql(expression.args.expression)
     const sql = exprSql ? ` AS${this.sep()}${exprSql}` : ""
     const result = `CACHE${lazy} TABLE ${table}${optionsSql}${sql}`
     return this.prependCtes(expression, result)
   }
 
   protected uncache_sql(expression: exp.Uncache): string {
-    const table = this.sql(expression, "this")
+    const table = this.sql(expression.args.this)
     const existsSql = expression.args.exists ? " IF EXISTS" : ""
     return `UNCACHE TABLE${existsSql} ${table}`
   }
@@ -4260,8 +4532,16 @@ export class Generator {
     return name
   }
 
-  funcCall(name: string, args: exp.Expression[]): string {
-    return `${name}(${this.expressions(args)})`
+  funcCall(name: string, args: ArgValue[]): string {
+    const argSqls: string[] = []
+    for (const a of args) {
+      let sql = this.sql(a)
+      if (a instanceof exp.Order && !a.args.this) {
+        sql = ` ${sql}`
+      }
+      argSqls.push(sql)
+    }
+    return `${name}(${argSqls.join(", ")})`
   }
 
   formatTimeStr(expression: exp.Expression): string {
@@ -4313,8 +4593,8 @@ export class Generator {
       name = this.normalizeFunc(expression.name)
     }
     const order = expression.args.order as exp.Expression | undefined
-    const orderSql = order ? ` ${this.sql(order)}` : ""
-    return this.funcCall(name, args) + orderSql
+    if (order) args.push(order)
+    return this.funcCall(name, args)
   }
 
   protected property_sql(expression: exp.Property): string {
@@ -4335,7 +4615,7 @@ export class Generator {
       this.unsupported(`Unsupported property ${expression.constructor.name}`)
       return ""
     }
-    return `${propertyName} ${this.sql(expression, "this")}`
+    return `${propertyName} ${this.sql(expression.args.this)}`
   }
 
   protected sep(sep = " "): string {
@@ -4409,34 +4689,34 @@ export class Generator {
   }
 
   protected introducer_sql(expression: exp.Introducer): string {
-    return `${this.sql(expression, "this")} ${this.sql(expression, "expression")}`
+    return `${this.sql(expression.args.this)} ${this.sql(expression.args.expression)}`
   }
 
   protected nextvaluefor_sql(expression: exp.NextValueFor): string {
     const order = expression.args.order as exp.Order | undefined
     const orderSql = order ? ` OVER (${this.order_sql(order)})` : ""
-    return `NEXT VALUE FOR ${this.sql(expression, "this")}${orderSql}`
+    return `NEXT VALUE FOR ${this.sql(expression.args.this)}${orderSql}`
   }
 
   protected scoperesolution_sql(expression: exp.ScopeResolution): string {
-    const thisSql = this.sql(expression, "this")
+    const thisSql = this.sql(expression.args.this)
     const expr = expression.args.expression as exp.Expression
     let exprSql: string
     if (expr instanceof exp.Func) {
-      const funcName = this.sql(expr, "this")
+      const funcName = this.sql(expr.args.this)
       const funcArgs = expr.expressions
         .map((a: exp.Expression) => this.sql(a))
         .join(", ")
       exprSql = `${funcName}(${funcArgs})`
     } else {
-      exprSql = this.sql(expression, "expression")
+      exprSql = this.sql(expression.args.expression)
     }
     return thisSql ? `${thisSql}::${exprSql}` : `::${exprSql}`
   }
 
   protected parsejson_sql(expression: exp.ParseJSON): string {
     if (this.PARSE_JSON_NAME === null) {
-      return this.sql(expression.this as exp.Expression)
+      return this.sql(expression.this)
     }
     const args: exp.Expression[] = [expression.this as exp.Expression]
     const expr = expression.args.expression as exp.Expression | undefined
@@ -4445,8 +4725,8 @@ export class Generator {
   }
 
   protected rand_sql(expression: exp.Rand): string {
-    const lower = this.sql(expression, "lower")
-    const upper = this.sql(expression, "upper")
+    const lower = this.sql(expression.args.lower)
+    const upper = this.sql(expression.args.upper)
     if (lower && upper) {
       const seedArgs = expression.args.this
         ? [expression.this as exp.Expression]
@@ -4470,7 +4750,7 @@ export class Generator {
 
   protected unicodestring_sql(expression: exp.UnicodeString): string {
     const ctor = this.constructor as typeof Generator
-    let thisStr = this.sql(expression, "this")
+    let thisStr = this.sql(expression.args.this)
     const escape = expression.args.escape as exp.Expression | undefined
 
     let escapeSubstitute: string

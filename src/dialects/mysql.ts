@@ -3,14 +3,14 @@
  */
 
 import {
-  Dialect,
   buildEscapedSequences,
   buildUnescapedSequences,
+  Dialect,
 } from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
-import { FunctionBuilder, Parser } from "../parser.js"
+import { type FunctionBuilder, Parser } from "../parser.js"
 import { TokenType } from "../tokens.js"
 import {
   datestrtodate_sql,
@@ -114,6 +114,7 @@ export class MySQLGenerator extends Generator {
   } = {
     ...Generator.FEATURES,
     INTERVAL_ALLOWS_PLURAL_FORM: false,
+    LOCKING_READS_SUPPORTED: true,
     NULL_ORDERING_SUPPORTED: null as boolean | null,
     CONCAT_COALESCE: true,
     SAFE_DIVISION: true,
@@ -145,6 +146,9 @@ export class MySQLGenerator extends Generator {
     ["LONGBLOB", "LONGBLOB"],
     ["TINYBLOB", "TINYBLOB"],
   ])
+
+  protected override JSON_KEY_VALUE_PAIR_SEP = ","
+  protected override JSON_PATH_BRACKETED_KEY_SUPPORTED = false
 
   static override TRANSFORMS: Map<ExpressionClass, Transform> = new Map<
     ExpressionClass,
@@ -197,7 +201,7 @@ export class MySQLGenerator extends Generator {
       exp.GroupConcat,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.GroupConcat
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const sep = expr.args.separator as exp.Expression | undefined
         const sepSql = sep ? gen.sql(sep) : "','"
         return `GROUP_CONCAT(${thisExpr} SEPARATOR ${sepSql})`
@@ -214,8 +218,8 @@ export class MySQLGenerator extends Generator {
       exp.TryCast,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.TryCast
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
-        const to = gen.sql(expr.args.to as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
+        const to = gen.sql(expr.args.to)
         return `CAST(${thisExpr} AS ${to})`
       },
     ],
@@ -226,7 +230,7 @@ export class MySQLGenerator extends Generator {
         const scale = expr.args.scale as exp.Literal | undefined
         const scaleValue =
           scale instanceof exp.Literal ? String(scale.value) : undefined
-        const timestamp = gen.sql(expr.args.this as exp.Expression)
+        const timestamp = gen.sql(expr.args.this)
         if (!scaleValue || scaleValue === "0") {
           return `FROM_UNIXTIME(${timestamp})`
         }
@@ -251,7 +255,7 @@ export class MySQLGenerator extends Generator {
     [
       exp.CountIf,
       (gen: Generator, e: exp.Expression) => {
-        const cond = gen.sql((e as exp.CountIf).args.this as exp.Expression)
+        const cond = gen.sql(e.args.this as exp.Expression)
         return `SUM(CASE WHEN ${cond} THEN 1 ELSE 0 END)`
       },
     ],
@@ -266,10 +270,10 @@ export class MySQLGenerator extends Generator {
 
   // MySQL uses LIMIT offset, count syntax (can also use LIMIT count OFFSET offset)
   protected override limit_sql(expression: exp.Limit): string {
-    const count = this.sql(expression.args.this as exp.Expression)
+    const count = this.sql(expression.args.this)
     const offset = expression.args.offset
     if (offset) {
-      return `LIMIT ${this.sql(offset as exp.Expression)}, ${count}`
+      return `LIMIT ${this.sql(offset)}, ${count}`
     }
     return `LIMIT ${count}`
   }
@@ -312,14 +316,14 @@ export class MySQLGenerator extends Generator {
     let sql = this.binary_sql(expression, "LIKE")
     const escapeExpr = expression.args.escape
     if (escapeExpr) {
-      sql += ` ESCAPE ${this.sql(escapeExpr as exp.Expression)}`
+      sql += ` ESCAPE ${this.sql(escapeExpr)}`
     }
     return sql
   }
 
   protected override ignorenulls_sql(expression: exp.IgnoreNulls): string {
     this.unsupported("MySQL does not support IGNORE NULLS.")
-    return this.sql(expression.args.this as exp.Expression)
+    return this.sql(expression.args.this)
   }
 
   static CAST_MAPPING: Record<string, string> = {
@@ -365,7 +369,7 @@ export class MySQLGenerator extends Generator {
     const full = expression.args.full ? " FULL" : ""
     const global_ = expression.args.global_ ? " GLOBAL" : ""
 
-    let target = this.sql(expression, "target")
+    let target = this.sql(expression.args.target)
     if (target) {
       if (name === "COLUMNS" || name === "INDEX") {
         target = ` FROM ${target}`
@@ -382,14 +386,12 @@ export class MySQLGenerator extends Generator {
       target = ""
     }
 
-    const db = expression.args.db
-      ? ` FROM ${this.sql(expression.args.db as exp.Expression)}`
-      : ""
+    const db = expression.args.db ? ` FROM ${this.sql(expression.args.db)}` : ""
     const like = expression.args.like
-      ? ` LIKE ${this.sql(expression.args.like as exp.Expression)}`
+      ? ` LIKE ${this.sql(expression.args.like)}`
       : ""
     const where = expression.args.where
-      ? ` ${this.sql(expression.args.where as exp.Expression)}`
+      ? ` ${this.sql(expression.args.where)}`
       : ""
 
     return `SHOW${full}${global_} ${name}${target}${db}${like}${where}`

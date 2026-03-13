@@ -5,7 +5,7 @@
 import { ErrorLevel, ParseError, type ParseErrorDetail } from "./errors.js"
 import * as exp from "./expressions.js"
 import { FUNCTION_BY_NAME, fromArgList } from "./expressions.js"
-import { Token, TokenType, Tokenizer } from "./tokens.js"
+import { Token, Tokenizer, TokenType } from "./tokens.js"
 
 export interface ParserOptions {
   dialect?: string
@@ -350,12 +350,95 @@ export class Parser {
     ["SESSION", (p) => p.parseSetItemAssignment("SESSION")],
   ])
 
-  static EXPRESSION_PARSERS: Map<
-    new (...args: unknown[]) => exp.Expression,
-    ExpressionParser
-  > = new Map([
-    // Can be extended by dialects, currently empty as placeholder
-  ])
+  static EXPRESSION_PARSERS: Map<exp.ExpressionClass, ExpressionParser> =
+    new Map<exp.ExpressionClass, ExpressionParser>([
+      [exp.Condition, (p) => p.parseDisjunction()],
+      [exp.DataType, (p) => p.parseDataType()],
+      [
+        exp.Expression as unknown as exp.ExpressionClass,
+        (p) => p.parseExpression(),
+      ],
+      [
+        exp.From,
+        (p) => {
+          p.match(TokenType.FROM)
+          return p.parseFrom()
+        },
+      ],
+      [
+        exp.Group,
+        (p) => {
+          p.match(TokenType.GROUP_BY)
+          return p.parseGroupBy()
+        },
+      ],
+      [
+        exp.Having,
+        (p) => {
+          p.match(TokenType.HAVING)
+          return p.parseHaving()
+        },
+      ],
+      [exp.Join, (p) => p.parseJoin()],
+      [exp.Whens, (p) => p.parseWhenMatched()],
+      [exp.Lambda, (p) => p.parseLambda()],
+      [exp.Lateral, (p) => p.parseLateral()],
+      [
+        exp.Limit,
+        (p) => {
+          p.match(TokenType.LIMIT)
+          return p.parseLimit()
+        },
+      ],
+      [
+        exp.Offset,
+        (p) => {
+          p.match(TokenType.OFFSET)
+          return p.parseOffset()
+        },
+      ],
+      [
+        exp.Order,
+        (p) => {
+          p.match(TokenType.ORDER_BY)
+          return p.parseOrder()
+        },
+      ],
+      [exp.Ordered, (p) => p.parseOrdered()],
+      [
+        exp.Qualify,
+        (p) => {
+          p.match(TokenType.QUALIFY)
+          return p.parseQualify()
+        },
+      ],
+      [
+        exp.Cluster,
+        (p) => {
+          p.match(TokenType.CLUSTER_BY)
+          return p.parseSortLike(exp.Cluster)
+        },
+      ],
+      [exp.Select, (p) => p.parseSelect()],
+      [
+        exp.Sort,
+        (p) => {
+          p.match(TokenType.SORT_BY)
+          return p.parseSortLike(exp.Sort)
+        },
+      ],
+      [exp.Returning, (p) => p.parseReturning()],
+      [exp.Table, (p) => p.parseTableName()],
+      [exp.TableAlias, (p) => p.parseTableAlias()],
+      [
+        exp.Where,
+        (p) => {
+          p.match(TokenType.WHERE)
+          return p.parseWhere()
+        },
+      ],
+      [exp.Window, (p) => p.parseNamedWindow()],
+    ])
 
   static COLUMN_OPERATORS: Map<TokenType, ColumnOperatorHandler | null> =
     BASE_COLUMN_OPERATORS
@@ -780,6 +863,46 @@ export class Parser {
   }
 
   parse(sql: string): exp.Expression[] {
+    return this._parseUsing(sql, (p) => p.parseStatement())
+  }
+
+  parseInto(
+    expressionTypes: exp.ExpressionClass | exp.ExpressionClass[],
+    sql: string,
+  ): exp.Expression[] {
+    const types = Array.isArray(expressionTypes)
+      ? expressionTypes
+      : [expressionTypes]
+    const errors: ParseError[] = []
+    for (const expressionType of types) {
+      const parserFn = (
+        this.constructor as typeof Parser
+      ).EXPRESSION_PARSERS.get(expressionType)
+      if (!parserFn) {
+        throw new TypeError(
+          `No parser registered for ${expressionType.name ?? String(expressionType)}`,
+        )
+      }
+      try {
+        return this._parseUsing(sql, parserFn)
+      } catch (e) {
+        if (e instanceof ParseError) {
+          errors.push(e)
+        } else {
+          throw e
+        }
+      }
+    }
+    throw new ParseError(
+      `Failed to parse '${sql}' into ${types.map((t) => t.name ?? String(t)).join(", ")}`,
+      errors.flatMap((e) => e.errors),
+    )
+  }
+
+  private _parseUsing(
+    sql: string,
+    parseMethod: ExpressionParser,
+  ): exp.Expression[] {
     this.sql = sql
     this.errors = []
     this.tokens = this.tokenizer.tokenize(sql)
@@ -788,11 +911,15 @@ export class Parser {
     const expressions: exp.Expression[] = []
 
     while (!this.isEnd()) {
-      const expr = this.parseStatement()
+      const before = this.index
+      const expr = parseMethod(this)
       if (expr) {
         expressions.push(expr)
       }
       this.match(TokenType.SEMICOLON)
+      if (this.index === before) {
+        break
+      }
     }
 
     this.checkErrors()
@@ -872,7 +999,7 @@ export class Parser {
   }
 
   parseAs<T extends exp.Expression>(
-    type: new (...args: unknown[]) => T,
+    type: exp.ExpressionClass<T>,
   ): T | undefined {
     const parserFn = (this.constructor as typeof Parser).EXPRESSION_PARSERS.get(
       type,
@@ -1155,6 +1282,34 @@ export class Parser {
       if (stmt) return stmt
     }
 
+    // L_PAREN after CTEs: WITH t AS (...) (SELECT ...) — parse as subquery
+    if (this.currentTokenType === TokenType.L_PAREN) {
+      const stmt = this.parseStatement()
+      if (stmt) {
+        // Unwrap wrapper Subqueries (matching Python's is_wrapper logic)
+        let unwrapped: exp.Expression = stmt
+        while (
+          unwrapped instanceof exp.Subquery &&
+          Object.entries(unwrapped.args).every(
+            ([k, v]) => k === "this" || v == null,
+          )
+        ) {
+          const inner = unwrapped.args.this
+          if (inner instanceof exp.Expression) {
+            unwrapped = inner
+          } else break
+        }
+        if (
+          "with_" in (unwrapped.constructor as typeof exp.Expression).argTypes
+        ) {
+          unwrapped.args.with_ = withExpr
+          withExpr.parent = unwrapped
+          return unwrapped
+        }
+        return stmt
+      }
+    }
+
     // Fallback: collect remaining tokens as command
     const parts: string[] = []
     while (!this.isEnd() && this.current.tokenType !== TokenType.SEMICOLON) {
@@ -1216,7 +1371,7 @@ export class Parser {
     })
   }
 
-  private parseTableAlias(): exp.TableAlias | undefined {
+  protected parseTableAlias(): exp.TableAlias | undefined {
     let name: exp.Identifier | undefined
     if (IDENTIFIER_TOKENS.has(this.current.tokenType)) {
       name = this.parseIdentifier()
@@ -1388,6 +1543,15 @@ export class Parser {
       else if (item instanceof exp.Rollup) rollupList.push(item)
       else if (item instanceof exp.GroupingSets) groupingSetsList.push(item)
       else expressions.push(item)
+    }
+
+    // Handle WITH CUBE / WITH ROLLUP (no parentheses, applies to all GROUP BY expressions)
+    if (this.match(TokenType.WITH)) {
+      if (this.match(TokenType.CUBE)) {
+        cubeList.push(new exp.Cube({ expressions: [] }))
+      } else if (this.match(TokenType.ROLLUP)) {
+        rollupList.push(new exp.Rollup({ expressions: [] }))
+      }
     }
 
     if (expressions.length > 0) groupArgs.expressions = expressions
@@ -2010,7 +2174,11 @@ export class Parser {
     } else if (parts.length === 2) {
       table = new exp.Table({ this: parts[1], db: parts[0] })
     } else if (parts.length === 3) {
-      table = new exp.Table({ this: parts[2], db: parts[1], catalog: parts[0] })
+      table = new exp.Table({
+        this: parts[2],
+        db: parts[1],
+        catalog: parts[0],
+      })
     } else {
       throw new Error("Invalid table name")
     }
@@ -2081,7 +2249,9 @@ export class Parser {
     }
     if (this.match(TokenType.FROM)) {
       const fromFirst = this.parseFromFirst()
-      return new exp.Subquery({ this: this.maybeParseSetOperations(fromFirst) })
+      return new exp.Subquery({
+        this: this.maybeParseSetOperations(fromFirst),
+      })
     }
     if (this.matchText("VALUES")) {
       const values = this.parseValues()
@@ -2217,7 +2387,15 @@ export class Parser {
     return new exp.Join(args)
   }
 
-  private parseOrdered(): exp.Ordered {
+  protected parseSortLike<T extends exp.Expression>(
+    expClass: new (args: exp.Args) => T,
+  ): T {
+    return new expClass({
+      expressions: this.parseCSV(() => this.parseOrdered()),
+    })
+  }
+
+  protected parseOrdered(): exp.Ordered {
     const expr = this.parseExpression()
     const args: exp.Args = { this: expr }
 
@@ -3017,16 +3195,39 @@ export class Parser {
     // Collect all parts: schema.table.column or x.method()
     const parts: exp.Identifier[] = [first]
 
+    let brokeAfterDot = false
     do {
       // Check for table.* pattern
       if (
         this.current.tokenType === TokenType.STAR ||
         !IDENTIFIER_TOKENS.has(this.current.tokenType)
       ) {
+        brokeAfterDot = true
         break
       }
       parts.push(this.parseIdentifier())
     } while (this.match(TokenType.DOT))
+
+    // Handle table.* pattern → Column(this=Star, table=identifier)
+    if (brokeAfterDot && this.match(TokenType.STAR)) {
+      const except_ = this.parseStarOp("EXCEPT", "EXCLUDE")
+      const replace = this.parseStarOp("REPLACE")
+      const star = new exp.Star({ except_, replace })
+      if (parts.length === 1) {
+        return new exp.Column({ this: star, table: parts[0] })
+      }
+      if (parts.length === 2) {
+        return new exp.Column({ this: star, table: parts[1], db: parts[0] })
+      }
+      if (parts.length === 3) {
+        return new exp.Column({
+          this: star,
+          table: parts[2],
+          db: parts[1],
+          catalog: parts[0],
+        })
+      }
+    }
 
     // Check if it's a method call (last part followed by parentheses)
     if (this.match(TokenType.L_PAREN)) {
@@ -3047,7 +3248,10 @@ export class Parser {
       if (columnParts.length === 1) {
         column = new exp.Column({ this: columnParts[0] })
       } else if (columnParts.length === 2) {
-        column = new exp.Column({ this: columnParts[1], table: columnParts[0] })
+        column = new exp.Column({
+          this: columnParts[1],
+          table: columnParts[0],
+        })
       } else if (columnParts.length === 3) {
         column = new exp.Column({
           this: columnParts[2],
@@ -3432,7 +3636,7 @@ export class Parser {
     }
   }
 
-  private parseNamedWindow(): exp.Window {
+  protected parseNamedWindow(): exp.Window {
     const name = this.parseIdentifier()
     this.match(TokenType.AS) // AS
     return this.parseWindowSpec_over(name)
@@ -4069,7 +4273,12 @@ export class Parser {
           new exp.FileFormatProperty({ this: this.parseAnyIdentifier() }),
         )
       } else if (this.matchTextSeq("STORED", "AS")) {
-        props.push(new exp.FileFormatProperty({ this: this.parsePrimary() }))
+        props.push(
+          new exp.FileFormatProperty({
+            this: this.parseAnyIdentifier(),
+            hive_format: true,
+          }),
+        )
       } else if (
         this.currentTokenType === TokenType.WITH &&
         this.peek(1).tokenType === TokenType.L_PAREN
@@ -4125,9 +4334,9 @@ export class Parser {
   }
 
   protected parseProperty(): exp.Expression {
-    const key = this.parseExpression()
+    const key = this.parsePrimary()
     if (this.match(TokenType.EQ) || this.match(TokenType.ALIAS)) {
-      const value = this.parseExpression()
+      const value = this.parsePrimary()
       return new exp.Property({ this: key, value })
     }
     return new exp.Property({ this: key })
@@ -4167,7 +4376,11 @@ export class Parser {
     } else if (parts.length === 2) {
       table = new exp.Table({ this: parts[1], db: parts[0] })
     } else if (parts.length === 3) {
-      table = new exp.Table({ this: parts[2], db: parts[1], catalog: parts[0] })
+      table = new exp.Table({
+        this: parts[2],
+        db: parts[1],
+        catalog: parts[0],
+      })
     } else {
       table = new exp.Table({ this: parts[0] })
     }
@@ -4819,7 +5032,24 @@ export class Parser {
   }
 
   protected parseInsertTable(): exp.Expression {
-    const table = this.parseTableName()
+    const parts: exp.Identifier[] = []
+    do {
+      parts.push(this.parseIdentifier())
+    } while (this.match(TokenType.DOT))
+
+    let table: exp.Table
+    if (parts.length === 1) {
+      table = new exp.Table({ this: parts[0] })
+    } else if (parts.length === 2) {
+      table = new exp.Table({ this: parts[1], db: parts[0] })
+    } else {
+      table = new exp.Table({
+        this: parts[parts.length - 1],
+        db: parts.length > 1 ? parts[parts.length - 2] : undefined,
+        catalog: parts.length > 2 ? parts[parts.length - 3] : undefined,
+      })
+    }
+
     if (this.match(TokenType.L_PAREN)) {
       const columns = this.parseCSV(() => this.parseAnyIdentifier())
       this.expect(TokenType.R_PAREN)
@@ -5062,12 +5292,27 @@ export class Parser {
       this.expect(TokenType.R_PAREN)
     }
 
+    const whens = this.parseWhenMatched()
+
+    return new exp.Merge({
+      this: target,
+      using,
+      on,
+      using_cond: usingCond,
+      whens: whens.expressions.length > 0 ? whens : undefined,
+      returning: this.parseReturning(),
+    })
+  }
+
+  protected parseWhenMatched(): exp.Whens {
     const whens: exp.When[] = []
     while (this.matchText("WHEN")) {
       const not = this.match(TokenType.NOT)
       this.matchText("MATCHED")
       const matched = !not
-      const source = this.matchTextSeq("BY", "SOURCE") || undefined
+      const source = this.matchTextSeq("BY", "TARGET")
+        ? false
+        : this.matchTextSeq("BY", "SOURCE") || undefined
       let condition: exp.Expression | undefined
       if (this.match(TokenType.AND)) {
         condition = this.parseExpression()
@@ -5076,31 +5321,29 @@ export class Parser {
       const then = this.parseMergeThen(matched)
       whens.push(new exp.When({ matched, source, condition, then }))
     }
-
-    return new exp.Merge({
-      this: target,
-      using,
-      on,
-      using_cond: usingCond,
-      whens:
-        whens.length > 0 ? new exp.Whens({ expressions: whens }) : undefined,
-    })
+    return new exp.Whens({ expressions: whens })
   }
 
   protected parseMergeThen(_matched: boolean): exp.Expression {
     if (this.match(TokenType.INSERT)) {
+      if (this.match(TokenType.STAR)) {
+        return new exp.Insert({ this: new exp.Star({}) })
+      }
       let this_: exp.Expression | undefined
-      if (this.match(TokenType.L_PAREN)) {
-        const columns = this.parseCSV(() => this.parseAnyIdentifier())
+      if (this.matchTextSeq("ROW")) {
+        this_ = new exp.Var({ this: "ROW" })
+      } else if (this.match(TokenType.L_PAREN)) {
+        const exprs = this.parseCSV(() => this.parseExpression())
         this.expect(TokenType.R_PAREN)
-        this_ = new exp.Schema({ expressions: columns })
+        this_ = new exp.Tuple({ expressions: exprs })
       }
       let expression: exp.Expression | undefined
       if (this.matchText("VALUES")) {
-        this.expect(TokenType.L_PAREN)
-        const values = this.parseCSV(() => this.parseExpression())
-        this.expect(TokenType.R_PAREN)
-        expression = new exp.Tuple({ expressions: values })
+        if (this.match(TokenType.L_PAREN)) {
+          const values = this.parseCSV(() => this.parseExpression())
+          this.expect(TokenType.R_PAREN)
+          expression = new exp.Tuple({ expressions: values })
+        }
       }
       return new exp.Insert({ this: this_, expression })
     }
@@ -5327,7 +5570,11 @@ export class Parser {
       // CROSS/OUTER APPLY expr
       const thisExpr = this.parsePrimary()
       const alias = this.parseTableAlias()
-      return new exp.Lateral({ this: thisExpr, alias, cross_apply: crossApply })
+      return new exp.Lateral({
+        this: thisExpr,
+        alias,
+        cross_apply: crossApply,
+      })
     }
 
     if (!this.match(TokenType.LATERAL)) return undefined
@@ -5341,7 +5588,7 @@ export class Parser {
     let alias: exp.TableAlias | undefined
     if (view) {
       const table = this.parseIdentifier()
-      const columns = this.match(TokenType.ALIAS)
+      const columns = this.match(TokenType.AS)
         ? this.parseCSV(() => this.parseIdentifier())
         : []
       alias = new exp.TableAlias({ this: table, columns })

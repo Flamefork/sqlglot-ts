@@ -7,8 +7,8 @@ import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
 import { annotateTypes } from "../optimizer/annotate_types.js"
-import { FunctionBuilder, Parser } from "../parser.js"
-import { TokenType, Tokenizer } from "../tokens.js"
+import { type FunctionBuilder, Parser } from "../parser.js"
+import { Tokenizer, TokenType } from "../tokens.js"
 import {
   addRecursiveCteColumnNames,
   datestrtodate_sql,
@@ -258,7 +258,7 @@ export class PrestoGenerator extends Generator {
         ) {
           gen.unsupported(`Expected utf-8 character set, got ${charset.name}.`)
         }
-        return gen.funcCall("TO_UTF8", [expr.args.this as exp.Expression])
+        return gen.funcCall("TO_UTF8", [expr.args.this])
       },
     ],
     [
@@ -272,8 +272,8 @@ export class PrestoGenerator extends Generator {
         ) {
           gen.unsupported(`Expected utf-8 character set, got ${charset.name}.`)
         }
-        const args: exp.Expression[] = [expr.args.this as exp.Expression]
-        if (expr.args.replace) args.push(expr.args.replace as exp.Expression)
+        const args = [expr.args.this]
+        if (expr.args.replace) args.push(expr.args.replace)
         return gen.funcCall("FROM_UTF8", args)
       },
     ],
@@ -284,7 +284,7 @@ export class PrestoGenerator extends Generator {
         const scale = expr.args.scale as exp.Literal | undefined
         const scaleValue =
           scale instanceof exp.Literal ? String(scale.value) : undefined
-        const timestamp = gen.sql(expr.args.this as exp.Expression)
+        const timestamp = gen.sql(expr.args.this)
         if (!scaleValue || scaleValue === "0") {
           return `FROM_UNIXTIME(${timestamp})`
         }
@@ -295,9 +295,7 @@ export class PrestoGenerator extends Generator {
       exp.TimeToStr,
       (gen: Generator, e: exp.Expression) => {
         const fmt = gen.formatTimeStr(e)
-        const thisExpr = gen.sql(
-          (e as exp.TimeToStr).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this)
         return `DATE_FORMAT(${thisExpr}, ${fmt})`
       },
     ],
@@ -305,9 +303,7 @@ export class PrestoGenerator extends Generator {
       exp.StrToTime,
       (gen: Generator, e: exp.Expression) => {
         const fmt = gen.formatTimeStr(e)
-        const thisExpr = gen.sql(
-          (e as exp.StrToTime).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this)
         return `DATE_PARSE(${thisExpr}, ${fmt})`
       },
     ],
@@ -317,8 +313,8 @@ export class PrestoGenerator extends Generator {
         const expr = e as exp.DateAdd
         return gen.funcCall("DATE_ADD", [
           exp.Literal.string(unitToStr(expr)),
-          expr.args.expression as exp.Expression,
-          expr.args.this as exp.Expression,
+          expr.args.expression,
+          expr.args.this,
         ])
       },
     ],
@@ -326,12 +322,11 @@ export class PrestoGenerator extends Generator {
       exp.DateSub,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.DateSub
-        const amount = expr.args.expression as exp.Expression
-        const negated = new exp.Neg({ this: amount })
+        const negated = new exp.Neg({ this: expr.args.expression })
         return gen.funcCall("DATE_ADD", [
           exp.Literal.string(unitToStr(expr)),
           negated,
-          expr.args.this as exp.Expression,
+          expr.args.this,
         ])
       },
     ],
@@ -341,8 +336,8 @@ export class PrestoGenerator extends Generator {
         const expr = e as exp.DateDiff
         return gen.funcCall("DATE_DIFF", [
           exp.Literal.string(unitToStr(expr)),
-          expr.args.expression as exp.Expression,
-          expr.args.this as exp.Expression,
+          expr.args.expression,
+          expr.args.this,
         ])
       },
     ],
@@ -353,7 +348,7 @@ export class PrestoGenerator extends Generator {
         const unit = unitToStr(expr)
         return gen.funcCall("DATE_TRUNC", [
           exp.Literal.string(unit),
-          expr.args.this as exp.Expression,
+          expr.args.this,
         ])
       },
     ],
@@ -364,7 +359,7 @@ export class PrestoGenerator extends Generator {
         const unit = unitToStr(expr)
         return gen.funcCall("DATE_TRUNC", [
           exp.Literal.string(unit),
-          expr.args.this as exp.Expression,
+          expr.args.this,
         ])
       },
     ],
@@ -373,9 +368,9 @@ export class PrestoGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.If
         return gen.funcCall("IF", [
-          expr.args.this as exp.Expression,
-          ...(expr.args.true ? [expr.args.true as exp.Expression] : []),
-          ...(expr.args.false ? [expr.args.false as exp.Expression] : []),
+          expr.args.this,
+          ...(expr.args.true ? [expr.args.true] : []),
+          ...(expr.args.false ? [expr.args.false] : []),
         ])
       },
     ],
@@ -387,10 +382,7 @@ export class PrestoGenerator extends Generator {
       exp.ArrayToString,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.ArrayToString
-        const args: exp.Expression[] = [
-          expr.args.this as exp.Expression,
-          expr.args.expression as exp.Expression,
-        ]
+        const args = [expr.args.this, expr.args.expression]
         return gen.funcCall("ARRAY_JOIN", args)
       },
     ],
@@ -400,8 +392,8 @@ export class PrestoGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.Quantile
         return gen.funcCall("APPROX_PERCENTILE", [
-          expr.args.this as exp.Expression,
-          expr.args.quantile as exp.Expression,
+          expr.args.this,
+          expr.args.quantile,
         ])
       },
     ],
@@ -409,7 +401,7 @@ export class PrestoGenerator extends Generator {
       exp.StructExtract,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.StructExtract
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const field = String(
           (expr.args.expression as exp.Expression).args.this ?? "",
         )
@@ -421,8 +413,8 @@ export class PrestoGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.BitwiseAnd
         return gen.funcCall("BITWISE_AND", [
-          expr.args.this as exp.Expression,
-          expr.args.expression as exp.Expression,
+          expr.args.this,
+          expr.args.expression,
         ])
       },
     ],
@@ -431,8 +423,8 @@ export class PrestoGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.BitwiseOr
         return gen.funcCall("BITWISE_OR", [
-          expr.args.this as exp.Expression,
-          expr.args.expression as exp.Expression,
+          expr.args.this,
+          expr.args.expression,
         ])
       },
     ],
@@ -441,15 +433,15 @@ export class PrestoGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.BitwiseXor
         return gen.funcCall("BITWISE_XOR", [
-          expr.args.this as exp.Expression,
-          expr.args.expression as exp.Expression,
+          expr.args.this,
+          expr.args.expression,
         ])
       },
     ],
     [
       exp.BitwiseNot,
       (gen: Generator, e: exp.Expression) => {
-        return gen.funcCall("BITWISE_NOT", [e.args.this as exp.Expression])
+        return gen.funcCall("BITWISE_NOT", [e.args.this])
       },
     ],
     [
@@ -457,8 +449,8 @@ export class PrestoGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.BitwiseLeftShift
         return gen.funcCall("BITWISE_ARITHMETIC_SHIFT_LEFT", [
-          expr.args.this as exp.Expression,
-          expr.args.expression as exp.Expression,
+          expr.args.this,
+          expr.args.expression,
         ])
       },
     ],
@@ -467,8 +459,8 @@ export class PrestoGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.BitwiseRightShift
         return gen.funcCall("BITWISE_ARITHMETIC_SHIFT_RIGHT", [
-          expr.args.this as exp.Expression,
-          expr.args.expression as exp.Expression,
+          expr.args.this,
+          expr.args.expression,
         ])
       },
     ],
@@ -478,7 +470,7 @@ export class PrestoGenerator extends Generator {
         const expr = e as exp.SortArray
         const asc = expr.args.asc
         const isDesc = asc instanceof exp.Boolean && asc.args.this === false
-        const thisStr = gen.sql(expr.args.this as exp.Expression)
+        const thisStr = gen.sql(expr.args.this)
         if (isDesc) {
           return `ARRAY_SORT(${thisStr}, (a, b) -> CASE WHEN a < b THEN 1 WHEN a > b THEN -1 ELSE 0 END)`
         }
@@ -493,7 +485,7 @@ export class PrestoGenerator extends Generator {
         const length = String(
           (expr.args.length as exp.Expression | undefined)?.args?.this ?? "256",
         )
-        return gen.funcCall(`SHA${length}`, [expr.args.this as exp.Expression])
+        return gen.funcCall(`SHA${length}`, [expr.args.this])
       },
     ],
     [exp.TimeStrToTime, timestrtotime_sql],
@@ -506,8 +498,8 @@ export class PrestoGenerator extends Generator {
         const expr = e as exp.TimestampAdd
         return gen.funcCall("DATE_ADD", [
           exp.Literal.string(unitToStr(expr)),
-          expr.args.expression as exp.Expression,
-          expr.args.this as exp.Expression,
+          expr.args.expression,
+          expr.args.this,
         ])
       },
     ],
@@ -517,8 +509,8 @@ export class PrestoGenerator extends Generator {
         const expression = tsOrDsAddCast(e as exp.TsOrDsAdd)
         return gen.funcCall("DATE_ADD", [
           exp.Literal.string(unitToStr(expression)),
-          expression.args.expression as exp.Expression,
-          expression.args.this as exp.Expression,
+          expression.args.expression,
+          expression.args.this,
         ])
       },
     ],
@@ -546,8 +538,8 @@ export class PrestoGenerator extends Generator {
 
   protected override regexplike_sql(expression: exp.RegexpLike): string {
     return this.funcCall("REGEXP_LIKE", [
-      expression.args.this as exp.Expression,
-      expression.args.expression as exp.Expression,
+      expression.args.this,
+      expression.args.expression,
     ])
   }
 
@@ -558,15 +550,15 @@ export class PrestoGenerator extends Generator {
 
   // Presto uses CAST
   protected override cast_sql(expression: exp.Cast): string {
-    const expr = this.sql(expression.args.this as exp.Expression)
-    const to = this.sql(expression.args.to as exp.Expression)
+    const expr = this.sql(expression.args.this)
+    const to = this.sql(expression.args.to)
     return `CAST(${expr} AS ${to})`
   }
 
   // Presto uses TRY_CAST
   protected override trycast_sql(expression: exp.TryCast): string {
-    const expr = this.sql(expression.args.this as exp.Expression)
-    const to = this.sql(expression.args.to as exp.Expression)
+    const expr = this.sql(expression.args.this)
+    const to = this.sql(expression.args.to)
     return `TRY_CAST(${expr} AS ${to})`
   }
 
@@ -595,11 +587,9 @@ export class PrestoGenerator extends Generator {
         if (e._type && e._type.text("this") === "UNKNOWN") {
           unknownType = true
         } else if (e._type) {
-          schema.push(
-            `${this.sql(e.args.this as exp.Expression)} ${this.sql(e._type)}`,
-          )
+          schema.push(`${this.sql(e.args.this)} ${this.sql(e._type)}`)
         }
-        values.push(this.sql(e.args.expression as exp.Expression))
+        values.push(this.sql(e.args.expression))
       } else {
         values.push(this.sql(e))
       }
@@ -632,7 +622,7 @@ export class PrestoGenerator extends Generator {
   protected override fileformatproperty_sql(
     expression: exp.FileFormatProperty,
   ): string {
-    return `format=${this.sql(expression.args.this as exp.Expression)}`
+    return `format=${this.sql(expression.args.this)}`
   }
 
   protected override transaction_sql(expression: exp.Transaction): string {

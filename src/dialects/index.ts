@@ -34,68 +34,43 @@ export { DuneDialect } from "./dune.js"
 export { SolrDialect } from "./solr.js"
 export { PRQLDialect } from "./prql.js"
 
-// Also export as named objects for convenience
-import { AthenaDialect } from "./athena.js"
-import { BigQueryDialect } from "./bigquery.js"
-import { ClickHouseDialect } from "./clickhouse.js"
-import { DatabricksDialect } from "./databricks.js"
-import { DorisDialect } from "./doris.js"
-import { DremioDialect } from "./dremio.js"
-import { DrillDialect } from "./drill.js"
-import { DruidDialect } from "./druid.js"
-import { DuckDBDialect } from "./duckdb.js"
-import { DuneDialect } from "./dune.js"
-import { ExasolDialect } from "./exasol.js"
-import { FabricDialect } from "./fabric.js"
-import { HiveDialect } from "./hive.js"
-import { MaterializeDialect } from "./materialize.js"
-import { MySQLDialect } from "./mysql.js"
-import { OracleDialect } from "./oracle.js"
-import { PostgresDialect } from "./postgres.js"
-import { PrestoDialect } from "./presto.js"
-import { PRQLDialect } from "./prql.js"
-import { RedshiftDialect } from "./redshift.js"
-import { RisingWaveDialect } from "./risingwave.js"
-import { SingleStoreDialect } from "./singlestore.js"
-import { SnowflakeDialect } from "./snowflake.js"
-import { SolrDialect } from "./solr.js"
-import { Spark2Dialect, SparkDialect } from "./spark.js"
-import { SQLiteDialect } from "./sqlite.js"
-import { StarRocksDialect } from "./starrocks.js"
-import { TableauDialect } from "./tableau.js"
-import { TeradataDialect } from "./teradata.js"
-import { TrinoDialect } from "./trino.js"
-import { TSQLDialect } from "./tsql.js"
+// Convenience singletons — use the registered instances from Dialect.get()
+// These match Python SQLGlot's API: `from sqlglot.dialects import DuckDB`
+import { Dialect } from "../dialect.js"
 
-export const Athena: AthenaDialect = new AthenaDialect()
-export const BigQuery: BigQueryDialect = new BigQueryDialect()
-export const ClickHouse: ClickHouseDialect = new ClickHouseDialect()
-export const Databricks: DatabricksDialect = new DatabricksDialect()
-export const Doris: DorisDialect = new DorisDialect()
-export const Dremio: DremioDialect = new DremioDialect()
-export const Drill: DrillDialect = new DrillDialect()
-export const Druid: DruidDialect = new DruidDialect()
-export const DuckDB: DuckDBDialect = new DuckDBDialect()
-export const Dune: DuneDialect = new DuneDialect()
-export const Exasol: ExasolDialect = new ExasolDialect()
-export const Fabric: FabricDialect = new FabricDialect()
-export const Hive: HiveDialect = new HiveDialect()
-export const Materialize: MaterializeDialect = new MaterializeDialect()
-export const MySQL: MySQLDialect = new MySQLDialect()
-export const Oracle: OracleDialect = new OracleDialect()
-export const Postgres: PostgresDialect = new PostgresDialect()
-export const Presto: PrestoDialect = new PrestoDialect()
-export const PRQL: PRQLDialect = new PRQLDialect()
-export const Redshift: RedshiftDialect = new RedshiftDialect()
-export const RisingWave: RisingWaveDialect = new RisingWaveDialect()
-export const SingleStore: SingleStoreDialect = new SingleStoreDialect()
-export const Snowflake: SnowflakeDialect = new SnowflakeDialect()
-export const Solr: SolrDialect = new SolrDialect()
-export const Spark: SparkDialect = new SparkDialect()
-export const Spark2: Spark2Dialect = new Spark2Dialect()
-export const SQLite: SQLiteDialect = new SQLiteDialect()
-export const StarRocks: StarRocksDialect = new StarRocksDialect()
-export const Tableau: TableauDialect = new TableauDialect()
-export const Teradata: TeradataDialect = new TeradataDialect()
-export const Trino: TrinoDialect = new TrinoDialect()
-export const TSQL: TSQLDialect = new TSQLDialect()
+function get(name: string): Dialect {
+  return Dialect.get(name)
+}
+
+export const Athena: Dialect = get("athena")
+export const BigQuery: Dialect = get("bigquery")
+export const ClickHouse: Dialect = get("clickhouse")
+export const Databricks: Dialect = get("databricks")
+export const Doris: Dialect = get("doris")
+export const Dremio: Dialect = get("dremio")
+export const Drill: Dialect = get("drill")
+export const Druid: Dialect = get("druid")
+export const DuckDB: Dialect = get("duckdb")
+export const Dune: Dialect = get("dune")
+export const Exasol: Dialect = get("exasol")
+export const Fabric: Dialect = get("fabric")
+export const Hive: Dialect = get("hive")
+export const Materialize: Dialect = get("materialize")
+export const MySQL: Dialect = get("mysql")
+export const Oracle: Dialect = get("oracle")
+export const Postgres: Dialect = get("postgres")
+export const Presto: Dialect = get("presto")
+export const PRQL: Dialect = get("prql")
+export const Redshift: Dialect = get("redshift")
+export const RisingWave: Dialect = get("risingwave")
+export const SingleStore: Dialect = get("singlestore")
+export const Snowflake: Dialect = get("snowflake")
+export const Solr: Dialect = get("solr")
+export const Spark: Dialect = get("spark")
+export const Spark2: Dialect = get("spark2")
+export const SQLite: Dialect = get("sqlite")
+export const StarRocks: Dialect = get("starrocks")
+export const Tableau: Dialect = get("tableau")
+export const Teradata: Dialect = get("teradata")
+export const Trino: Dialect = get("trino")
+export const TSQL: Dialect = get("tsql")

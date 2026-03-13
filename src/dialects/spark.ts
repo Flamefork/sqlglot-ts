@@ -3,14 +3,14 @@
  */
 
 import {
-  Dialect,
   buildEscapedSequences,
   buildUnescapedSequences,
+  Dialect,
 } from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import type { Generator } from "../generator.js"
-import { FunctionBuilder } from "../parser.js"
+import type { FunctionBuilder } from "../parser.js"
 import {
   anyToExists,
   eliminateDistinctOn,
@@ -92,7 +92,7 @@ export class Spark2Generator extends HiveGenerator {
         const scale = expr.args.scale as exp.Literal | undefined
         const scaleValue =
           scale instanceof exp.Literal ? String(scale.value) : undefined
-        const timestamp = gen.sql(expr.args.this as exp.Expression)
+        const timestamp = gen.sql(expr.args.this)
         if (scaleValue === undefined) {
           return `CAST(FROM_UNIXTIME(${timestamp}) AS TIMESTAMP)`
         }
@@ -112,9 +112,7 @@ export class Spark2Generator extends HiveGenerator {
       exp.StrToTime,
       (gen: Generator, e: exp.Expression) => {
         const fmt = gen.formatTimeStr(e)
-        const thisExpr = gen.sql(
-          (e as exp.StrToTime).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this)
         return `TO_TIMESTAMP(${thisExpr}, ${fmt})`
       },
     ],
@@ -123,7 +121,7 @@ export class Spark2Generator extends HiveGenerator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.Encode
         return gen.funcCall("ENCODE", [
-          expr.args.this as exp.Expression,
+          expr.args.this,
           exp.Literal.string("utf-8"),
         ])
       },
@@ -133,7 +131,7 @@ export class Spark2Generator extends HiveGenerator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.Decode
         return gen.funcCall("DECODE", [
-          expr.args.this as exp.Expression,
+          expr.args.this,
           exp.Literal.string("utf-8"),
         ])
       },
@@ -142,11 +140,10 @@ export class Spark2Generator extends HiveGenerator {
       exp.ArrayToString,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.ArrayToString
-        const args: exp.Expression[] = [
-          expr.args.this as exp.Expression,
-          expr.args.expression as exp.Expression,
-        ]
-        return gen.funcCall("ARRAY_JOIN", args)
+        return gen.funcCall("ARRAY_JOIN", [
+          expr.args.this,
+          expr.args.expression,
+        ])
       },
     ],
     [exp.TimestampTrunc, timestamptrunc_sql()],
@@ -159,10 +156,7 @@ export class Spark2Generator extends HiveGenerator {
       exp.BitwiseLeftShift,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.BitwiseLeftShift
-        return gen.funcCall("SHIFTLEFT", [
-          expr.args.this as exp.Expression,
-          expr.args.expression as exp.Expression,
-        ])
+        return gen.funcCall("SHIFTLEFT", [expr.args.this, expr.args.expression])
       },
     ],
     [
@@ -170,8 +164,8 @@ export class Spark2Generator extends HiveGenerator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.BitwiseRightShift
         return gen.funcCall("SHIFTRIGHT", [
-          expr.args.this as exp.Expression,
-          expr.args.expression as exp.Expression,
+          expr.args.this,
+          expr.args.expression,
         ])
       },
     ],
@@ -182,10 +176,10 @@ export class Spark2Generator extends HiveGenerator {
         return gen.funcCall(
           "REGEXP_REPLACE",
           [
-            expr.args.this as exp.Expression,
-            expr.args.expression as exp.Expression,
-            expr.args.replacement as exp.Expression,
-            expr.args.position as exp.Expression | undefined,
+            expr.args.this,
+            expr.args.expression,
+            expr.args.replacement,
+            expr.args.position,
           ].filter((x): x is exp.Expression => x != null),
         )
       },
@@ -209,8 +203,8 @@ function dateaddSql(gen: Generator, e: exp.Expression): string {
 
   if (!unitStr || (e instanceof exp.TsOrDsAdd && unitStr === "DAY")) {
     return gen.funcCall("DATE_ADD", [
-      expression.args.this as exp.Expression,
-      expression.args.expression as exp.Expression,
+      expression.args.this,
+      expression.args.expression,
     ])
   }
 
@@ -299,8 +293,8 @@ export class SparkGenerator extends Spark2Generator {
       exp.TryCast,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.TryCast
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
-        const to = gen.sql(expr.args.to as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
+        const to = gen.sql(expr.args.to)
         return expr.args.safe
           ? `TRY_CAST(${thisExpr} AS ${to})`
           : `CAST(${thisExpr} AS ${to})`
@@ -321,32 +315,23 @@ export class SparkGenerator extends Spark2Generator {
     [
       exp.SafeAdd,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("TRY_ADD", [
-          e.args.this as exp.Expression,
-          e.args.expression as exp.Expression,
-        ]),
+        gen.funcCall("TRY_ADD", [e.args.this, e.args.expression]),
     ],
     [
       exp.SafeMultiply,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("TRY_MULTIPLY", [
-          e.args.this as exp.Expression,
-          e.args.expression as exp.Expression,
-        ]),
+        gen.funcCall("TRY_MULTIPLY", [e.args.this, e.args.expression]),
     ],
     [
       exp.SafeSubtract,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("TRY_SUBTRACT", [
-          e.args.this as exp.Expression,
-          e.args.expression as exp.Expression,
-        ]),
+        gen.funcCall("TRY_SUBTRACT", [e.args.this, e.args.expression]),
     ],
   ])
 
   protected datediff_sql(expression: exp.DateDiff): string {
-    const end = this.sql(expression.args.this as exp.Expression)
-    const start = this.sql(expression.args.expression as exp.Expression)
+    const end = this.sql(expression.args.this)
+    const start = this.sql(expression.args.expression)
 
     if (expression.args.unit) {
       const unit = unitToVar(expression)

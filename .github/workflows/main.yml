@@ -14,22 +14,17 @@ jobs:
         with:
           submodules: recursive
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22.x
-          cache: npm
+      - name: Install just
+        uses: taiki-e/install-action@just
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
       - name: Install
         run: npm ci
-      - name: Build
-        run: npm run build
       - name: Test
-        run: npm test
-      - name: Packaging test
-        run: npm run test:packaging
-      - name: Check codegen freshness
-        run: npm run generate && git diff --exit-code src/expressions.generated.ts
+        run: just test
   publish:
     if: startsWith(github.event.ref, 'refs/tags/v')
     needs: test
@@ -44,15 +39,16 @@ jobs:
         with:
           submodules: recursive
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22.x
           registry-url: https://registry.npmjs.org
-          cache: npm
+      - name: Setup just
+        uses: taiki-e/install-action@just
       - name: Install
         run: npm ci
       - name: Build
-        run: npm run build
+        run: just build
       - name: Update npm
         run: npm install -g npm@latest
       - name: Publish

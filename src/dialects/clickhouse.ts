@@ -3,14 +3,14 @@
  */
 
 import {
-  Dialect,
   buildEscapedSequences,
   buildUnescapedSequences,
+  Dialect,
 } from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
-import { FunctionBuilder, Parser } from "../parser.js"
+import { type FunctionBuilder, Parser } from "../parser.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
 
@@ -300,7 +300,7 @@ export class ClickHouseGenerator extends Generator {
         const scale = expr.args.scale as exp.Literal | undefined
         const scaleValue =
           scale instanceof exp.Literal ? String(scale.value) : undefined
-        const timestamp = gen.sql(expr.args.this as exp.Expression)
+        const timestamp = gen.sql(expr.args.this)
         if (!scaleValue || scaleValue === "0") {
           return `fromUnixTimestamp(CAST(${timestamp} AS Int64))`
         }
@@ -393,8 +393,8 @@ export class ClickHouseGenerator extends Generator {
       exp.DateTrunc,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.DateTrunc
-        const unit = gen.sql(expr.args.unit as exp.Expression)
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const unit = gen.sql(expr.args.unit)
+        const thisExpr = gen.sql(expr.args.this)
         const zone = expr.args.zone as exp.Expression | undefined
         const zoneStr = zone ? `, ${gen.sql(zone)}` : ""
         return `dateTrunc(${unit}, ${thisExpr}${zoneStr})`
@@ -448,6 +448,15 @@ export class ClickHouseGenerator extends Generator {
     }
 
     return `Nullable(${dtype})`
+  }
+
+  protected override cte_sql(expression: exp.CTE): string {
+    if (expression.args.scalar) {
+      const thisSql = this.sql(expression.args.this)
+      const alias = this.sql(expression.args.alias)
+      return `${thisSql} AS ${alias}`
+    }
+    return super.cte_sql(expression)
   }
 }
 
