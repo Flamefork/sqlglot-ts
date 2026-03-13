@@ -15,20 +15,20 @@ sys.path.insert(0, str(CONFTEST_DIR))
 import pytest
 
 # Determine project root based on where conftest is located.
-if CONFTEST_DIR.name == "python" and CONFTEST_DIR.parent.name == "tools":
-    PROJECT_ROOT = CONFTEST_DIR.parent.parent
+if CONFTEST_DIR.name == "tools":
+    PROJECT_ROOT = CONFTEST_DIR.parent
 else:
     # Running from sqlglot/tests/dialects/ -> go up to sqlglot-ts
     # dialects -> tests -> sqlglot -> sqlglot-ts (3 levels)
     PROJECT_ROOT = CONFTEST_DIR.parent.parent.parent
-    sys.path.insert(0, str(PROJECT_ROOT / "tools" / "python"))
+    sys.path.insert(0, str(PROJECT_ROOT / "tools"))
 
 
 def pytest_configure(config):
     import types
 
     build = subprocess.run(
-        ["npm", "run", "build"],
+        ["just", "build"],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,

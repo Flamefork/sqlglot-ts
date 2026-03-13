@@ -9,7 +9,7 @@ This script is a strict parity check: it counts how many Python functions/method
 ## Usage
 
 ```bash
-npm run check:api-surface
+just api-surface
 ```
 
 ## How it works
@@ -27,6 +27,6 @@ npm run check:api-surface
 | `api_surface_excludes.json` | Exclusions with rationale (internal utils, Python-specific, etc.) |
 ## Workflow
 
-- Implemented a new method/function -> run `npm run check:api-surface`
+- Implemented a new method/function -> run `just api-surface`
 - The check stays green only when missing count is zero
 - New exclusion — add to `api_surface_excludes.json` with rationale

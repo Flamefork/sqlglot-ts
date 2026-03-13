@@ -5,12 +5,12 @@
  */
 
 import { createInterface } from "node:readline";
-import * as expMod from "../../dist/expressions.generated.mjs";
-import * as expHelpers from "../../dist/expressions.mjs";
-import "../../dist/dialects/index.mjs";
+import * as expMod from "../dist/expressions.generated.mjs";
+import * as expHelpers from "../dist/expressions.mjs";
+import "../dist/dialects/index.mjs";
 
-import { indexOffsetLogs } from "../../dist/expressions.mjs";
-import * as indexMod from "../../dist/index.mjs";
+import { indexOffsetLogs } from "../dist/expressions.mjs";
+import * as indexMod from "../dist/index.mjs";
 
 const { annotateTypes, parse, parseOne, transpile } = indexMod;
 

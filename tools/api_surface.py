@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 TOOLS_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = TOOLS_DIR.parent.parent
+PROJECT_DIR = TOOLS_DIR.parent
 
 CLASSES = [
     "Expression",

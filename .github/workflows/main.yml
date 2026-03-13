@@ -4,7 +4,7 @@ on:
   push:
 
 jobs:
-  fast-checks:
+  test:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -18,37 +18,17 @@ jobs:
         with:
           node-version: 22.x
           cache: npm
-      - name: Install
-        run: npm ci
-      - name: Fast verify
-        run: npm run verify:fast
-  packaging-and-shape:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          submodules: recursive
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: npm
+      - name: Install just
+        uses: taiki-e/install-action@just
       - name: Install uv
         uses: astral-sh/setup-uv@v6
       - name: Install
         run: npm ci
-      - name: Packaging smoke
-        run: npm run test:packaging
-      - name: Check codegen freshness
-        run: npm run check:codegen
-      - name: Check API surface
-        run: npm run check:api-surface
+      - name: Test
+        run: just test
   publish:
     if: startsWith(github.event.ref, 'refs/tags/v')
-    needs: [fast-checks, packaging-and-shape]
+    needs: test
     runs-on: ubuntu-latest
     environment: npm
     permissions:
@@ -65,10 +45,12 @@ jobs:
           node-version: 22.x
           registry-url: https://registry.npmjs.org
           cache: npm
+      - name: Setup just
+        uses: extractions/setup-just@v3
       - name: Install
         run: npm ci
       - name: Build
-        run: npm run build
+        run: just build
       - name: Update npm
         run: npm install -g npm@latest
       - name: Publish

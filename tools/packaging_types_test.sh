@@ -3,14 +3,18 @@ set -euo pipefail
 
 echo "=== Type smoke test: npm pack -> temp install -> tsc ==="
 
-REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." >/dev/null && pwd)
+REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null && pwd)
 PACK_DIR=$(mktemp -d)
 PROJ_DIR=$(mktemp -d)
 trap 'rm -rf "$PACK_DIR" "$PROJ_DIR"' EXIT
 
 cd "$REPO_ROOT"
 
-npm run build
+if [ ! -d dist ]; then
+  echo "dist/ is missing; run 'just build' first" >&2
+  exit 1
+fi
+
 npm pack --pack-destination "$PACK_DIR"
 
 TARBALLS=("$PACK_DIR"/sqlglot-ts-*.tgz)

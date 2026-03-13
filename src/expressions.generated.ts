@@ -1,7 +1,7 @@
 /**
  * AUTO-GENERATED - DO NOT EDIT
  * Generated from sqlglot/sqlglot/expressions.py
- * Run: npm run generate
+ * Run: just generate
  */
 
 import { Expression, type Args, type ExpressionClass, camelToSnakeCase, maybeParse, _applyBuilder, _applyListBuilder, _applyChildListBuilder, _applyConjunctionBuilder, type BuilderOptions, _extractBuilderArgs } from './expression-base.js';

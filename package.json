@@ -29,31 +29,6 @@
 	"files": [
 		"dist"
 	],
-	"scripts": {
-		"build": "tsdown",
-		"check:format": "oxfmt --check src examples",
-		"check:lint": "oxlint src examples",
-		"check:types": "tsc --noEmit && tsc -p examples --noEmit",
-		"check:architecture": "node tools/smoke/fluent_api_architecture_test.mjs",
-		"check:codegen": "node tools/smoke/check_codegen_freshness.mjs",
-		"check:api-surface": "npm run build && uv run --directory tools/python python api_surface.py",
-		"test:examples": "npm run build && node --experimental-strip-types --test examples/*.test.ts",
-		"test:compat:duckdb": "npm run test:compat -- -k TestDuckDB",
-		"test:compat": "npm run build && uv run --directory tools/python pytest",
-		"test:packaging:runtime": "bash tools/smoke/packaging_test.sh",
-		"test:packaging:types": "bash tools/smoke/packaging_types_test.sh",
-		"test:packaging": "npm run test:packaging:runtime && npm run test:packaging:types",
-		"verify:fast": "npm run check:format && npm run check:lint && npm run check:types && npm run test:examples && npm run check:architecture",
-		"verify:ci": "npm run verify:fast && npm run test:packaging && npm run check:codegen && npm run check:api-surface",
-		"verify:full": "npm run verify:ci && npm run test:compat",
-		"test": "npm run verify:fast",
-		"fix:format": "oxfmt src examples",
-		"fix:lint": "oxlint --fix src examples",
-		"fix": "npm run fix:format && npm run fix:lint",
-		"generate": "uv run --directory tools/python generate.py",
-		"release:prepare": "npm run verify:ci",
-		"release": "bash tools/release/release.sh"
-	},
 	"keywords": [
 		"sql",
 		"parser",

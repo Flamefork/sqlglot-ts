@@ -126,23 +126,23 @@ Typical sizes (gzipped):
 Runnable examples that double as tests live in [`examples/`](./examples/) — they import from `sqlglot-ts` just like user code and cover the full public API: parsing, transpilation, dialects, AST traversal, builder, and serialization.
 
 ```bash
-npm run test:examples  # Run all examples
+just examples  # Run all examples
 ```
 
 ## Development
 
 ```bash
-npm install            # Install dependencies
-npm run build          # Build
-npm run verify:fast    # format + lint + typecheck + examples + architecture
-npm run verify:ci      # verify:fast + packaging + codegen freshness + API surface
-npm run verify:full    # verify:ci + full compat
-npm run test:compat:duckdb  # Fast compat subset used for targeted local checks
-npm run test:compat    # Full compat run (all dialects)
-npm run test:packaging # npm pack -> temp install -> verify exports
-npm run fix            # Format + lint fix
-npm run generate       # Generate TS expressions from Python SQLGlot
-npm run release -- 0.2.0  # verify:ci + bump version + commit + tag + push
+just install-deps      # Install Node + Python tool dependencies
+just update-deps       # Update lockfiles and sync both environments
+just build             # Build
+just fix               # Format + lint fix
+just test              # Main quality gate used locally and in CI
+just compat -k TestDuckDB  # Targeted compat subset
+just compat            # Full compat run (all dialects)
+just full              # just test + full compat
+just packaging         # npm pack -> temp install -> verify exports
+just generate          # Generate TS expressions from Python SQLGlot
+just release 0.2.0     # Bump version + commit + tag + push
 ```
 
 ## Differences from Python SQLGlot

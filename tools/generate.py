@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate TypeScript expression classes from Python SQLGlot.
-Run: npm run generate
+Run: just generate
 """
 
 import ast
@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import textwrap
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass
@@ -1186,7 +1186,7 @@ def generate_typescript(
     lines.append("/**")
     lines.append(" * AUTO-GENERATED - DO NOT EDIT")
     lines.append(" * Generated from sqlglot/sqlglot/expressions.py")
-    lines.append(" * Run: npm run generate")
+    lines.append(" * Run: just generate")
     lines.append(" */")
     lines.append("")
     # Placeholder for import line — will be filled after code generation

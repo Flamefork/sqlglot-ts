@@ -14,7 +14,7 @@ import types
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 import logging
@@ -27,7 +27,7 @@ class TSBridge:
 
     def __init__(self):
         self.proc = subprocess.Popen(
-            ["node", "tools/python/ts_bridge.js"],
+            ["node", "tools/ts_bridge.js"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

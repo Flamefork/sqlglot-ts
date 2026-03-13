@@ -16,7 +16,9 @@ function trackedDirtyPaths() {
 
 const before = trackedDirtyPaths()
 
-execFileSync("npm", ["run", "generate"], { stdio: "inherit" })
+execFileSync("uv", ["run", "--directory", "tools", "generate.py"], {
+  stdio: "inherit",
+})
 
 const after = trackedDirtyPaths()
 const newlyDirty = [...after].filter((path) => !before.has(path))
