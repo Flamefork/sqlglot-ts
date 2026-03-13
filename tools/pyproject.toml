@@ -16,7 +16,7 @@ testpaths = [
   "../sqlglot/tests/test_build.py",
   "../sqlglot/tests/test_expressions.py",
 ]
-addopts = "-v --tb=short -p compat.conftest --import-mode=importlib -k 'not test_lazy_load'"
+addopts = "-v --tb=short -p conftest --import-mode=importlib -k 'not test_lazy_load'"
 
 [tool.pyright]
 typeCheckingMode = "strict"

@@ -21,6 +21,8 @@ from compat.proxy import ExpressionProxyMeta
 from compat.proxy import deserialize
 from compat.proxy import serialize_arg
 from compat.proxy import set_convert_handler
+from compat.proxy import set_create_datatype_handler
+from compat.proxy import set_parse_one_handler
 
 
 class DataTypeEnum:
@@ -937,6 +939,22 @@ def _register_error_module() -> None:
     sys.modules["sqlglot.errors"] = sqlglot_errors
 
 
+def _register_test_modules() -> None:
+    from compat.validator import Validator  # noqa: PLC0415
+
+    tests_mod = types.ModuleType("tests")
+    tests_mod.__path__ = []
+    sys.modules["tests"] = tests_mod
+
+    tests_dialects = types.ModuleType("tests.dialects")
+    tests_dialects.__path__ = []
+    sys.modules["tests.dialects"] = tests_dialects
+
+    tests_test_dialect = types.ModuleType("tests.dialects.test_dialect")
+    tests_test_dialect.Validator = Validator
+    sys.modules["tests.dialects.test_dialect"] = tests_test_dialect
+
+
 def register_fake_sqlglot() -> None:
     sqlglot_mod = types.ModuleType("sqlglot")
     _register_core_module(sqlglot_mod)
@@ -945,3 +963,10 @@ def register_fake_sqlglot() -> None:
     _register_optimizer_modules()
     _register_dialect_modules(sqlglot_mod, sqlglot_exp)
     _register_error_module()
+    _register_test_modules()
+
+    from compat.api import create_datatype  # noqa: PLC0415
+    from compat.api import parse_one  # noqa: PLC0415
+
+    set_parse_one_handler(parse_one)
+    set_create_datatype_handler(create_datatype)

@@ -51,7 +51,7 @@ api-surface: build
 test: format lint typecheck examples architecture packaging codegen api-surface
 
 [positional-arguments]
-compat +args="":
+compat +args="--": build
     uv run --directory {{tools_dir}} python -m pytest "$@"
 
 full: test
