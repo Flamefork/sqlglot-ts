@@ -12,6 +12,7 @@ dependencies = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = [
+  # Tier 1: dialect + core behavior
   "../sqlglot/tests/dialects",
   "../sqlglot/tests/test_build.py",
   "../sqlglot/tests/test_expressions.py",
@@ -19,6 +20,11 @@ testpaths = [
   "../sqlglot/tests/test_transpile.py",
   "../sqlglot/tests/test_parser.py",
   "../sqlglot/tests/test_tokens.py",
+  # Tier 2: utility coverage
+  "../sqlglot/tests/test_serde.py",
+  "../sqlglot/tests/test_time.py",
+  "../sqlglot/tests/test_errors.py",
+  "../sqlglot/tests/test_helper.py",
 ]
 addopts = "-v --tb=short -p conftest --import-mode=importlib -k 'not test_lazy_load'"
 

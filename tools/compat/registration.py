@@ -861,10 +861,20 @@ def _register_expressions_module(
     sqlglot_mod.intersect = _intersect
     sqlglot_mod.except_ = _except
 
-    for submod in ["helper", "generator"]:
-        mod = types.ModuleType(f"sqlglot.{submod}")
-        mod.logger = logging.getLogger("sqlglot")
-        sys.modules[f"sqlglot.{submod}"] = mod
+    from compat.time_shim import merge_ranges  # noqa: PLC0415
+    from compat.time_shim import name_sequence  # noqa: PLC0415
+    from compat.time_shim import tsort  # noqa: PLC0415
+
+    helper_mod = types.ModuleType("sqlglot.helper")
+    helper_mod.logger = logging.getLogger("sqlglot")
+    helper_mod.merge_ranges = merge_ranges
+    helper_mod.name_sequence = name_sequence
+    helper_mod.tsort = tsort
+    sys.modules["sqlglot.helper"] = helper_mod
+
+    generator_mod = types.ModuleType("sqlglot.generator")
+    generator_mod.logger = logging.getLogger("sqlglot")
+    sys.modules["sqlglot.generator"] = generator_mod
 
     parser_mod = types.ModuleType("sqlglot.parser")
     parser_mod.logger = logging.getLogger("sqlglot.parser")
@@ -975,12 +985,29 @@ def _register_tokens_module() -> None:
 
 
 def _register_error_module() -> None:
+    from compat.time_shim import ANSI_RESET  # noqa: PLC0415
+    from compat.time_shim import ANSI_UNDERLINE  # noqa: PLC0415
+    from compat.time_shim import highlight_sql  # noqa: PLC0415
+
     sqlglot_errors = types.ModuleType("sqlglot.errors")
     sqlglot_errors.ParseError = ParseError
     sqlglot_errors.UnsupportedError = UnsupportedError
     sqlglot_errors.TokenError = TokenError
     sqlglot_errors.ErrorLevel = ErrorLevel
+    sqlglot_errors.highlight_sql = highlight_sql
+    sqlglot_errors.ANSI_UNDERLINE = ANSI_UNDERLINE
+    sqlglot_errors.ANSI_RESET = ANSI_RESET
     sys.modules["sqlglot.errors"] = sqlglot_errors
+
+
+def _register_time_module() -> None:
+    from compat.time_shim import format_time  # noqa: PLC0415
+    from compat.time_shim import subsecond_precision  # noqa: PLC0415
+
+    sqlglot_time = types.ModuleType("sqlglot.time")
+    sqlglot_time.format_time = format_time
+    sqlglot_time.subsecond_precision = subsecond_precision
+    sys.modules["sqlglot.time"] = sqlglot_time
 
 
 def _register_test_modules() -> None:
@@ -1002,6 +1029,7 @@ def _register_test_modules() -> None:
     tests_helpers.assert_logger_contains = _assert_logger_contains
     tests_helpers.load_sql_fixtures = _load_sql_fixtures
     tests_helpers.load_sql_fixture_pairs = _load_sql_fixture_pairs
+    tests_helpers.FIXTURES_DIR = _FIXTURES_DIR
     sys.modules["tests.helpers"] = tests_helpers
 
 
@@ -1063,6 +1091,7 @@ def register_fake_sqlglot() -> None:
     _register_dialect_modules(sqlglot_mod, sqlglot_exp)
     _register_tokens_module()
     _register_error_module()
+    _register_time_module()
     _register_test_modules()
 
     from compat.api import create_datatype  # noqa: PLC0415
