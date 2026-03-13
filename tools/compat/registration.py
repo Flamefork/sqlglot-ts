@@ -3,6 +3,7 @@ import datetime
 import logging
 import sys
 import types
+from pathlib import Path
 from typing import Any
 from typing import ClassVar
 
@@ -21,6 +22,11 @@ from compat.proxy import ExpressionProxyMeta
 from compat.proxy import deserialize
 from compat.proxy import serialize_arg
 from compat.proxy import set_convert_handler
+from compat.proxy import set_create_datatype_handler
+from compat.proxy import set_parse_one_handler
+from compat.tokens import Token
+from compat.tokens import Tokenizer
+from compat.tokens import TokenType
 
 
 class DataTypeEnum:
@@ -43,12 +49,23 @@ class DataTypeEnum:
         return hash(self.value)
 
 
+class FuncClass(Expression):
+    arg_types: ClassVar[dict[str, bool]] = {}
+    is_var_len_args: ClassVar[bool] = False
+
+    @classmethod
+    def default_parser_mappings(cls) -> dict[str, Any]:
+        return {}
+
+
 class ExpModule(types.ModuleType):
     _expr_classes: ClassVar[dict[str, type]] = {}
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
             raise AttributeError(name)
+        if name == "Func":
+            return FuncClass
         if name not in self._expr_classes:
             cls = ExpressionProxyMeta(name, (Expression,), {"__name__": name})
 
@@ -777,11 +794,20 @@ def _annotate_types(expression: ExpressionProxy, **_kwargs: Any) -> ExpressionPr
     return expression
 
 
+class ParserProxy:
+    FUNCTIONS: ClassVar[dict[str, Any]] = {}
+
+    def parse(self, tokens: list, **_kwargs: Any) -> list[ExpressionProxy]:
+        sql = " ".join(t.text for t in tokens)
+        return [parse_one(sql)]
+
+
 def _register_core_module(sqlglot_mod: types.ModuleType) -> None:
     sqlglot_mod.parse = parse
     sqlglot_mod.parse_one = parse_one
     sqlglot_mod.transpile = transpile
     sqlglot_mod.Expression = Expression
+    sqlglot_mod.Parser = ParserProxy
     sqlglot_mod.ParseError = ParseError
     sqlglot_mod.TokenError = TokenError
     sqlglot_mod.UnsupportedError = UnsupportedError
@@ -835,13 +861,25 @@ def _register_expressions_module(
     sqlglot_mod.intersect = _intersect
     sqlglot_mod.except_ = _except
 
-    for submod in ["helper", "generator", "parser"]:
-        mod = types.ModuleType(f"sqlglot.{submod}")
-        logger_name = (
-            "sqlglot" if submod in {"helper", "generator"} else f"sqlglot.{submod}"
-        )
-        mod.logger = logging.getLogger(logger_name)
-        sys.modules[f"sqlglot.{submod}"] = mod
+    from compat.time_shim import merge_ranges  # noqa: PLC0415
+    from compat.time_shim import name_sequence  # noqa: PLC0415
+    from compat.time_shim import tsort  # noqa: PLC0415
+
+    helper_mod = types.ModuleType("sqlglot.helper")
+    helper_mod.logger = logging.getLogger("sqlglot")
+    helper_mod.merge_ranges = merge_ranges
+    helper_mod.name_sequence = name_sequence
+    helper_mod.tsort = tsort
+    sys.modules["sqlglot.helper"] = helper_mod
+
+    generator_mod = types.ModuleType("sqlglot.generator")
+    generator_mod.logger = logging.getLogger("sqlglot")
+    sys.modules["sqlglot.generator"] = generator_mod
+
+    parser_mod = types.ModuleType("sqlglot.parser")
+    parser_mod.logger = logging.getLogger("sqlglot.parser")
+    parser_mod.Parser = ParserProxy
+    sys.modules["sqlglot.parser"] = parser_mod
 
     return sqlglot_exp
 
@@ -906,11 +944,21 @@ def _register_dialect_modules(
                 data_type.Type.MEDIUMINT: "SIGNED",
             }
         generator_class = type(f"{name}Generator", (), generator_attrs)
+        dialect_name_lower = name.lower()
+        tokenizer_class = type(
+            f"{name}Tokenizer",
+            (Tokenizer,),
+            {
+                "__init__": lambda self, _d=dialect_name_lower: Tokenizer.__init__(
+                    self, _d
+                )
+            },
+        )
         dialect_class = type(
             name,
             (),
             {
-                "Tokenizer": type(f"{name}Tokenizer", (), {}),
+                "Tokenizer": tokenizer_class,
                 "Parser": type(f"{name}Parser", (), {}),
                 "Generator": generator_class,
             },
@@ -928,13 +976,110 @@ def _register_dialect_modules(
     sys.modules["sqlglot.dialects.dialect"] = dialect_dialect
 
 
+def _register_tokens_module() -> None:
+    sqlglot_tokens = types.ModuleType("sqlglot.tokens")
+    sqlglot_tokens.Tokenizer = Tokenizer
+    sqlglot_tokens.TokenType = TokenType
+    sqlglot_tokens.Token = Token
+    sys.modules["sqlglot.tokens"] = sqlglot_tokens
+
+
 def _register_error_module() -> None:
+    from compat.time_shim import ANSI_RESET  # noqa: PLC0415
+    from compat.time_shim import ANSI_UNDERLINE  # noqa: PLC0415
+    from compat.time_shim import highlight_sql  # noqa: PLC0415
+
     sqlglot_errors = types.ModuleType("sqlglot.errors")
     sqlglot_errors.ParseError = ParseError
     sqlglot_errors.UnsupportedError = UnsupportedError
     sqlglot_errors.TokenError = TokenError
     sqlglot_errors.ErrorLevel = ErrorLevel
+    sqlglot_errors.highlight_sql = highlight_sql
+    sqlglot_errors.ANSI_UNDERLINE = ANSI_UNDERLINE
+    sqlglot_errors.ANSI_RESET = ANSI_RESET
     sys.modules["sqlglot.errors"] = sqlglot_errors
+
+
+def _register_time_module() -> None:
+    from compat.time_shim import format_time  # noqa: PLC0415
+    from compat.time_shim import subsecond_precision  # noqa: PLC0415
+
+    sqlglot_time = types.ModuleType("sqlglot.time")
+    sqlglot_time.format_time = format_time
+    sqlglot_time.subsecond_precision = subsecond_precision
+    sys.modules["sqlglot.time"] = sqlglot_time
+
+
+def _register_test_modules() -> None:
+    from compat.validator import Validator  # noqa: PLC0415
+
+    tests_mod = types.ModuleType("tests")
+    tests_mod.__path__ = []
+    sys.modules["tests"] = tests_mod
+
+    tests_dialects = types.ModuleType("tests.dialects")
+    tests_dialects.__path__ = []
+    sys.modules["tests.dialects"] = tests_dialects
+
+    tests_test_dialect = types.ModuleType("tests.dialects.test_dialect")
+    tests_test_dialect.Validator = Validator
+    sys.modules["tests.dialects.test_dialect"] = tests_test_dialect
+
+    tests_helpers = types.ModuleType("tests.helpers")
+    tests_helpers.assert_logger_contains = _assert_logger_contains
+    tests_helpers.load_sql_fixtures = _load_sql_fixtures
+    tests_helpers.load_sql_fixture_pairs = _load_sql_fixture_pairs
+    tests_helpers.FIXTURES_DIR = _FIXTURES_DIR
+    sys.modules["tests.helpers"] = tests_helpers
+
+
+def _assert_logger_contains(message: str, logger: Any, level: str = "error") -> None:
+    output = "\n".join(
+        str(args[0][0]) for args in getattr(logger, level).call_args_list
+    )
+    if message not in output:
+        msg = f"Expected '{message}' not in {output}"
+        raise AssertionError(msg)
+
+
+def _filter_comments(s: str) -> str:
+    return "\n".join(
+        line for line in s.splitlines() if line and not line.startswith("--")
+    )
+
+
+def _extract_meta(sql: str) -> tuple[str, dict[str, str]]:
+    meta: dict[str, str] = {}
+    sql_lines = sql.split("\n")
+    i = 0
+    while i < len(sql_lines) and sql_lines[i].startswith("#"):
+        key, val = sql_lines[i].split(":", maxsplit=1)
+        meta[key.lstrip("#").strip()] = val.strip()
+        i += 1
+    sql = "\n".join(sql_lines[i:])
+    return sql, meta
+
+
+_FIXTURES_DIR = (
+    Path(__file__).resolve().parent.parent.parent / "sqlglot" / "tests" / "fixtures"
+)
+
+
+def _load_sql_fixtures(filename: str):
+    text = (_FIXTURES_DIR / filename).read_text(encoding="utf-8")
+    yield from _filter_comments(text).splitlines()
+
+
+def _load_sql_fixture_pairs(filename: str):
+    text = (_FIXTURES_DIR / filename).read_text(encoding="utf-8")
+    statements = _filter_comments(text).split(";")
+    size = len(statements)
+    for i in range(0, size, 2):
+        if i + 1 < size:
+            sql = statements[i].strip()
+            sql, meta = _extract_meta(sql)
+            expected = statements[i + 1].strip()
+            yield meta, sql, expected
 
 
 def register_fake_sqlglot() -> None:
@@ -944,4 +1089,13 @@ def register_fake_sqlglot() -> None:
     sqlglot_exp = _register_expressions_module(sqlglot_mod)
     _register_optimizer_modules()
     _register_dialect_modules(sqlglot_mod, sqlglot_exp)
+    _register_tokens_module()
     _register_error_module()
+    _register_time_module()
+    _register_test_modules()
+
+    from compat.api import create_datatype  # noqa: PLC0415
+    from compat.api import parse_one  # noqa: PLC0415
+
+    set_parse_one_handler(parse_one)
+    set_create_datatype_handler(create_datatype)

@@ -185,6 +185,7 @@ export const DEFAULT_FEATURES: GeneratorFeatures = {
 
 export interface GenerateOptions {
   pretty?: boolean
+  identify?: boolean | "safe"
   indent?: number
   pad?: number
   unsupportedLevel?: "IGNORE" | "WARN" | "RAISE"
@@ -580,6 +581,7 @@ export class Generator {
   protected _indent: number
   protected pad: number
   protected pretty: boolean
+  protected identify: boolean | "safe"
   protected leadingComma: boolean
   protected maxTextWidth: number
   protected version: [number, number, number]
@@ -596,8 +598,9 @@ export class Generator {
   constructor(options: GenerateOptions = {}) {
     this.options = options
     this.pretty = options.pretty ?? false
+    this.identify = options.identify ?? false
     this._indent = options.indent ?? 2
-    this.pad = options.pad ?? 0
+    this.pad = options.pad ?? 2
     this.leadingComma = false
     this.maxTextWidth = 80
     this.version = options.version ?? [
@@ -623,7 +626,7 @@ export class Generator {
       expression = expression.copy()
     }
     expression = this.preprocess(expression)
-    return this.sql(expression)
+    return this.sql(expression).trim()
   }
 
   preprocess(expression: exp.Expression): exp.Expression {
@@ -732,11 +735,11 @@ export class Generator {
 
   protected identifier_sql(expression: exp.Identifier): string {
     const name = expression.name
-    if (expression.quoted) {
-      return this.quoteIdentifier(name)
-    }
-    // Quote if needed (reserved words, special chars)
-    if (this.shouldQuote(name)) {
+    if (
+      expression.quoted ||
+      this.canQuote(expression) ||
+      this.shouldQuote(name)
+    ) {
       return this.quoteIdentifier(name)
     }
     return name
@@ -986,26 +989,26 @@ export class Generator {
   > = {
     cluster: (gen, e) => {
       const cluster = e.args.cluster
-      return cluster ? ` ${gen.sql(cluster)}` : ""
+      return cluster ? gen.sql(cluster) : ""
     },
     distribute: (gen, e) => {
       const distribute = e.args.distribute
-      return distribute ? ` ${gen.sql(distribute)}` : ""
+      return distribute ? gen.sql(distribute) : ""
     },
     sort: (gen, e) => {
       const sort = e.args.sort
-      return sort ? ` ${gen.sql(sort)}` : ""
+      return sort ? gen.sql(sort) : ""
     },
     windows: (gen, e) => {
       const windows = e.args.windows
       if (Array.isArray(windows) && windows.length > 0) {
-        return ` WINDOW ${windows.map((w: exp.Expression) => gen.sql(w)).join(", ")}`
+        return `${gen.seg("WINDOW ")}${gen.expressions(windows, { flat: true })}`
       }
       return ""
     },
     qualify: (gen, e) => {
       const qualify = e.args.qualify
-      return qualify ? ` ${gen.sql(qualify)}` : ""
+      return qualify ? gen.sql(qualify) : ""
     },
   }
 
@@ -1013,68 +1016,6 @@ export class Generator {
     expression: exp.Expression,
     ...sqls: string[]
   ): string {
-    const parts: string[] = []
-    for (const s of sqls) {
-      if (s) parts.push(s)
-    }
-
-    // JOINs
-    const joins = expression.args.joins
-    if (Array.isArray(joins)) {
-      for (const join of joins) {
-        const joinSql = this.sql(join)
-        if (joinSql.startsWith(",")) {
-          parts.push(parts.length > 0 ? parts.pop() + joinSql : joinSql)
-        } else {
-          parts.push(joinSql)
-        }
-      }
-    }
-
-    // LATERALs
-    const laterals = expression.args.laterals
-    if (Array.isArray(laterals)) {
-      for (const lateral of laterals) {
-        parts.push(this.sql(lateral))
-      }
-    }
-
-    // MATCH_RECOGNIZE
-    const matchExpr = expression.args.match
-    if (matchExpr) {
-      const matchSql = this.sql(matchExpr)
-      if (matchSql) parts.push(matchSql)
-    }
-
-    // PREWHERE (ClickHouse)
-    const prewhere = expression.args.prewhere
-    if (prewhere) {
-      const prewhereSql = this.sql(prewhere)
-      if (prewhereSql) parts.push(prewhereSql)
-    }
-
-    // WHERE
-    const where = expression.args.where
-    if (where) parts.push(this.sql(where))
-
-    // GROUP BY
-    const group = expression.args.group
-    if (group) parts.push(this.sql(group))
-
-    // HAVING
-    const having = expression.args.having
-    if (having) parts.push(this.sql(having))
-
-    // AFTER_HAVING modifiers (WINDOW defs, QUALIFY, etc.)
-    for (const gen of Object.values(this.AFTER_HAVING_MODIFIER_TRANSFORMS)) {
-      const s = gen(this, expression)
-      if (s) parts.push(s.trimStart())
-    }
-
-    // ORDER BY
-    const order = expression.args.order
-    if (order) parts.push(this.sql(order))
-
     // LIMIT / FETCH conversion
     let limit = expression.args.limit as exp.Expression | undefined
     const isFetch = limit instanceof exp.Fetch
@@ -1092,38 +1033,43 @@ export class Generator {
       })
     }
 
-    // OFFSET and LIMIT/FETCH (order depends on whether it's FETCH)
-    const offsetLimitParts = this.offsetLimitModifiers(
-      expression,
-      isFetch,
-      limit,
-    )
-    for (const part of offsetLimitParts) {
-      if (part) parts.push(part)
-    }
+    // Each clause method uses seg() for its own prefix, so join with ""
+    const parts = [
+      ...sqls,
+      ...(Array.isArray(expression.args.joins)
+        ? (expression.args.joins as exp.Expression[]).map((j) => this.sql(j))
+        : []),
+      this.sql(expression.args.match),
+      ...(Array.isArray(expression.args.laterals)
+        ? (expression.args.laterals as exp.Expression[]).map((l) => this.sql(l))
+        : []),
+      this.sql(expression.args.prewhere),
+      this.sql(expression.args.where),
+      this.sql(expression.args.group),
+      this.sql(expression.args.having),
+      ...Object.values(this.AFTER_HAVING_MODIFIER_TRANSFORMS).map((gen) =>
+        gen(this, expression),
+      ),
+      this.sql(expression.args.order),
+      ...this.offsetLimitModifiers(expression, isFetch, limit),
+      ...this.afterLimitModifiers(expression),
+      this.optionsModifier(expression),
+      this.forModifiers(expression),
+    ]
 
-    // LOCKS (FOR UPDATE / FOR SHARE)
+    return parts.filter((s) => s).join("")
+  }
+
+  protected afterLimitModifiers(expression: exp.Expression): string[] {
     const locks = expression.args.locks
-    if (Array.isArray(locks)) {
-      for (const lock of locks) {
-        const lockSql = this.sql(lock)
-        if (lockSql) parts.push(lockSql)
-      }
-    }
-
-    // SAMPLE (after locks, matching Python's after_limit_modifiers)
-    const sampleSql = this.sql(expression.args.sample)
-    if (sampleSql) parts.push(sampleSql.trimStart())
-
-    // OPTIONS (TSQL OPTION clause)
-    const optionsMod = this.optionsModifier(expression)
-    if (optionsMod) parts.push(optionsMod.trimStart())
-
-    // FOR XML (TSQL FOR XML clause)
-    const forMod = this.forModifiers(expression)
-    if (forMod) parts.push(forMod.trimStart())
-
-    return parts.join(this.pretty ? "\n" : " ")
+    const locksSql =
+      Array.isArray(locks) && locks.length > 0
+        ? (locks as exp.Expression[])
+            .map((l) => this.sql(l))
+            .filter((s) => s)
+            .join(" ")
+        : ""
+    return [locksSql ? ` ${locksSql}` : "", this.sql(expression.args.sample)]
   }
 
   select_sql(expression: exp.Select): string {
@@ -1150,34 +1096,27 @@ export class Generator {
       ? ` ${this.sql(expression.args.distinct)}`
       : ""
     const exprs = expression.expressions
-    const rawExprsSql = exprs.length > 0 ? this.expressions(exprs) : "*"
-    const exprsSql = this.pretty ? `\n  ${rawExprsSql}` : ` ${rawExprsSql}`
-
-    // INTO
-    const intoSql = expression.args.into
-      ? ` ${this.sql(expression.args.into)}`
-      : ""
-
-    // FROM
-    const from = expression.args.from_
-    const fromSql = from ? ` ${this.sql(from)}` : ""
+    const rawExprsSql = exprs.length > 0 ? this.expressions(expression) : "*"
+    const exprsSql = `${this.sep()}${rawExprsSql}`
 
     return (
       withSql +
       this.queryModifiers(
         expression,
-        `SELECT${hint}${kind}${distinct}${exprsSql}${intoSql}`,
-        fromSql.trimStart(),
+        `SELECT${hint}${kind}${distinct}${exprsSql}`,
+        this.sql(expression.args.into),
+        this.sql(expression.args.from_),
       )
     )
   }
 
   protected from_sql(expression: exp.From): string {
-    return `FROM ${this.sql(expression.args.this)}`
+    return `${this.seg("FROM")} ${this.sql(expression.args.this)}`
   }
 
   protected where_sql(expression: exp.Where): string {
-    return `WHERE ${this.sql(expression.args.this)}`
+    const thisStr = this.indentSql(this.sql(expression.args.this))
+    return `${this.seg("WHERE")}${this.sep()}${thisStr}`
   }
 
   protected group_sql(expression: exp.Group): string {
@@ -1213,11 +1152,11 @@ export class Generator {
         }
       }
     }
-    let result = `GROUP BY ${parts.join(", ")}`
+    const groupBy = `${this.seg("GROUP BY")}${this.sep()}${this.indentSql(parts.join(", "))}`
     if (withParts.length > 0) {
-      result += ` ${withParts.join(" ")}`
+      return `${groupBy} ${withParts.join(" ")}`
     }
-    return result
+    return groupBy
   }
 
   protected cube_sql(expression: exp.Cube): string {
@@ -1235,17 +1174,19 @@ export class Generator {
   }
 
   protected having_sql(expression: exp.Having): string {
-    return `HAVING ${this.sql(expression.args.this)}`
+    const thisStr = this.indentSql(this.sql(expression.args.this))
+    return `${this.seg("HAVING")}${this.sep()}${thisStr}`
   }
 
   protected qualify_sql(expression: exp.Qualify): string {
-    return `QUALIFY ${this.sql(expression.args.this)}`
+    const thisStr = this.indentSql(this.sql(expression.args.this))
+    return `${this.seg("QUALIFY")}${this.sep()}${thisStr}`
   }
 
   protected into_sql(expression: exp.Into): string {
     const temporary = expression.args.temporary ? " TEMPORARY" : ""
     const unlogged = expression.args.unlogged ? " UNLOGGED" : ""
-    return `INTO${temporary || unlogged} ${this.sql(expression.args.this)}`
+    return `${this.seg("INTO")}${temporary || unlogged} ${this.sql(expression.args.this)}`
   }
 
   protected prior_sql(expression: exp.Prior): string {
@@ -1309,7 +1250,7 @@ export class Generator {
       const table = alias?.args.this ? ` ${this.sql(alias.args.this)}` : ""
       const columnsSql = columns ? ` AS ${columns}` : ""
       const outer = expression.args.outer ? " OUTER" : ""
-      return `LATERAL VIEW${outer} ${thisExpr}${table}${columnsSql}`
+      return `${this.seg(`LATERAL VIEW${outer}`)}${this.sep()}${thisExpr}${table}${columnsSql}`
     }
     const alias = this.sql(expression.args.alias)
     const aliasSql = alias ? ` AS ${alias}` : ""
@@ -1320,12 +1261,15 @@ export class Generator {
     return `${this.lateral_op(expression)} ${thisExpr}${aliasSql}`
   }
 
-  protected order_sql(expression: exp.Order): string {
+  protected order_sql(expression: exp.Order, flat = false): string {
     const thisExpr = this.sql(expression.args.this)
     const thisPrefix = thisExpr ? `${thisExpr} ` : ""
     const siblings = expression.args.siblings ? "SIBLINGS " : ""
-    const exprs = expression.expressions
-    return `${thisPrefix}ORDER ${siblings}BY ${this.expressions(exprs)}`
+    return this.op_expressions(
+      `${thisPrefix}ORDER ${siblings}BY`,
+      expression,
+      !!thisExpr || flat,
+    )
   }
 
   protected ordered_sql(expression: exp.Ordered): string {
@@ -1414,7 +1358,7 @@ export class Generator {
     const limitOptions = expression.args.limit_options
       ? this.sql(expression.args.limit_options)
       : ""
-    return `LIMIT ${this.sql(expression.args.this)}${limitOptions}`
+    return `${this.seg("LIMIT")} ${this.sql(expression.args.this)}${limitOptions}`
   }
 
   protected limitoptions_sql(expression: exp.LimitOptions): string {
@@ -1426,7 +1370,7 @@ export class Generator {
   }
 
   protected offset_sql(expression: exp.Offset): string {
-    return `OFFSET ${this.sql(expression.args.this)}`
+    return `${this.seg("OFFSET")} ${this.sql(expression.args.this)}`
   }
 
   protected fetch_sql(expression: exp.Fetch): string {
@@ -1436,7 +1380,7 @@ export class Generator {
     const countStr = count ? ` ${count}` : ""
     const limitOptions = this.sql(expression.args.limit_options)
     const limitStr = limitOptions || " ROWS ONLY"
-    return `FETCH${dirStr}${countStr}${limitStr}`
+    return `${this.seg("FETCH")}${dirStr}${countStr}${limitStr}`
   }
 
   protected offsetLimitModifiers(
@@ -1465,31 +1409,34 @@ export class Generator {
       return `, ${this.sql(expression.args.this)}`
     }
 
-    const parts: string[] = []
+    const opParts: string[] = []
 
     // Order: method -> side -> kind -> JOIN
-    if (method) parts.push(String(method))
+    if (method) opParts.push(String(method))
     const isSemiAnti = kind === "SEMI" || kind === "ANTI"
     if (side && !(isSemiAnti && !this.features.SEMI_ANTI_JOIN_WITH_SIDE))
-      parts.push(String(side))
-    if (kind) parts.push(String(kind))
-    parts.push("JOIN")
+      opParts.push(String(side))
+    if (kind) opParts.push(String(kind))
+    opParts.push("JOIN")
 
-    parts.push(this.sql(expression.args.this))
+    const opSql = opParts.join(" ")
+    const thisSql = this.sql(expression.args.this)
 
+    let onSql = ""
     const on = expression.args.on
-    if (on) {
-      parts.push("ON")
-      parts.push(this.sql(on))
-    }
-
     const using = expression.args.using
-    if (using && Array.isArray(using)) {
-      parts.push("USING")
-      parts.push(`(${this.expressions(using)})`)
+
+    if (on) {
+      onSql = this.indentSql(this.sql(on), 0, undefined, true)
+      const space = this.pretty ? this.seg(" ".repeat(this.pad)) : " "
+      onSql = `${space}ON ${onSql}`
+    } else if (using && Array.isArray(using)) {
+      onSql = this.indentSql(this.expressions(using), 0, undefined, true)
+      const space = this.pretty ? this.seg(" ".repeat(this.pad)) : " "
+      onSql = `${space}USING (${onSql})`
     }
 
-    return parts.join(" ")
+    return `${this.seg(opSql)} ${thisSql}${onSql}`
   }
 
   // ==================== Set Operations ====================
@@ -1538,8 +1485,9 @@ export class Generator {
   }
 
   protected subquery_sql(expression: exp.Subquery, sep = " AS "): string {
-    const inner = this.sql(expression.args.this)
-    let sql = `(${inner})`
+    const thisExpr = expression.args.this
+    const inner = this.sql(thisExpr)
+    let sql = this.wrap(inner)
     const alias = expression.args.alias
     const aliasSql = alias ? `${sep}${this.sql(alias)}` : ""
     const sample = expression.args.sample
@@ -1613,7 +1561,7 @@ export class Generator {
       const usingSql = using
         ? ` USING ${using.map((u) => this.sql(u)).join(", ")}`
         : ""
-      return `${direction} ${thisExpr}${on}${usingSql}${group ? ` ${group}` : ""}`
+      return `${direction} ${thisExpr}${on}${usingSql}${group}`
     }
 
     // Standard pivot: PIVOT(aggregation FOR field IN (values))
@@ -1623,7 +1571,7 @@ export class Generator {
     const fields = expression.args.fields as exp.Expression[] | undefined
     const fieldsSql = fields ? fields.map((f) => this.sql(f)).join(" ") : ""
 
-    return `${direction}(${expressionsSql} FOR ${fieldsSql}${group ? ` ${group}` : ""})${aliasSql}`
+    return `${direction}(${expressionsSql} FOR ${fieldsSql}${group})${aliasSql}`
   }
 
   protected pivotalias_sql(expression: exp.PivotAlias): string {
@@ -1942,7 +1890,8 @@ export class Generator {
   }
 
   protected paren_sql(expression: exp.Paren): string {
-    return `(${this.sql(expression.args.this)})`
+    const sql = this.seg(this.indentSql(this.sql(expression.args.this)), "")
+    return `(${sql}${this.seg(")", "")}`
   }
 
   protected all_sql(expression: exp.All): string {
@@ -2048,10 +1997,8 @@ export class Generator {
       argsSql += `, ${separatorSql}`
     }
     if (order) {
-      const orderSql = this.sql(
-        new exp.Order({ expressions: order.expressions }),
-      )
-      argsSql += ` ${orderSql}`
+      const orderExpr = new exp.Order({ expressions: order.expressions })
+      argsSql += ` ${this.order_sql(orderExpr, true)}`
     }
 
     return `GROUP_CONCAT(${argsSql})`
@@ -2465,9 +2412,9 @@ export class Generator {
       parts.push(`PARTITION BY ${this.expressions(partitionBy)}`)
     }
 
-    const order = expression.args.order
+    const order = expression.args.order as exp.Order | undefined
     if (order) {
-      parts.push(this.sql(order))
+      parts.push(this.order_sql(order, true))
     }
 
     const spec = expression.args.spec
@@ -2578,9 +2525,9 @@ export class Generator {
 
   protected withingroup_sql(expression: exp.WithinGroup): string {
     const func = this.sql(expression.args.this)
-    const order = expression.args.expression
+    const order = expression.args.expression as exp.Order | undefined
     if (order) {
-      return `${func} WITHIN GROUP (${this.sql(order)})`
+      return `${func} WITHIN GROUP (${this.order_sql(order, true)})`
     }
     return `${func} WITHIN GROUP ()`
   }
@@ -2843,14 +2790,13 @@ export class Generator {
     expression: exp.UserDefinedFunction,
   ): string {
     const name = this.sql(expression.args.this)
-    const exprs = expression.expressions
-    if (expression.args.wrapped && exprs.length > 0) {
-      return `${name}(${this.expressions(exprs)})`
-    }
-    if (expression.args.wrapped) {
-      return `${name}()`
-    }
-    return name
+    const exprs = this.noIdentify(() => this.expressions(expression))
+    const exprsSql = expression.args.wrapped
+      ? this.wrap(exprs)
+      : exprs.trim()
+        ? ` ${exprs}`
+        : ""
+    return exprsSql ? `${name}${exprsSql}` : name
   }
 
   protected columndef_sql(expression: exp.ColumnDef): string {
@@ -3035,7 +2981,7 @@ export class Generator {
     const forModifiers = this.expressions(expression, { key: "for_" })
     if (!forModifiers) return ""
     if (this.pretty) {
-      return `\nFOR XML\n${this.indentSql(forModifiers, 1, 0)}`
+      return `${this.sep()}FOR XML${this.seg(forModifiers)}`
     }
     return ` FOR XML ${forModifiers}`
   }
@@ -3195,21 +3141,18 @@ export class Generator {
     const using = this.expressionsFromKey(expression, "using")
     const usingSql = using ? ` USING ${using}` : ""
     const where = this.sql(expression.args.where)
-    const whereSql = where ? ` ${where}` : ""
     const returning = this.sql(expression.args.returning)
     const returningSql = returning ? ` ${returning}` : ""
     const order = this.sql(expression.args.order)
-    const orderSql = order ? ` ${order}` : ""
     const limit = this.sql(expression.args.limit)
-    const limitSql = limit ? ` ${limit}` : ""
     const tables = this.expressionsFromKey(expression, "tables")
     const tablesSql = tables ? ` ${tables}` : ""
 
     let expressionSql: string
     if (this.RETURNING_END) {
-      expressionSql = `${thisSql}${usingSql}${whereSql}${returningSql}${orderSql}${limitSql}`
+      expressionSql = `${thisSql}${usingSql}${where}${returningSql}${order}${limit}`
     } else {
-      expressionSql = `${returningSql}${thisSql}${usingSql}${whereSql}${orderSql}${limitSql}`
+      expressionSql = `${returningSql}${thisSql}${usingSql}${where}${order}${limit}`
     }
     return this.prependCtes(expression, `DELETE${tablesSql}${expressionSql}`)
   }
@@ -3292,36 +3235,31 @@ export class Generator {
       : ""
 
     const where = this.sql(expression.args.where)
-    const whereSql = where ? ` ${where}` : ""
 
-    return `${conflict}${constraintSql} ${conflictKeysSql}${action}${exprSql}${whereSql}`
+    return `${conflict}${constraintSql} ${conflictKeysSql}${action}${exprSql}${where}`
   }
 
   protected update_sql(expression: exp.Update): string {
     const this_ = this.sql(expression.args.this)
     const setSql = this.expressionsFromKey(expression, "expressions")
     const from = this.sql(expression.args.from_)
-    const fromSql = from ? ` ${from}` : ""
     const where = this.sql(expression.args.where)
-    const whereSql = where ? ` ${where}` : ""
     const returning = this.sql(expression.args.returning)
     const returningSql = returning ? ` ${returning}` : ""
     const order = this.sql(expression.args.order)
-    const orderSql = order ? ` ${order}` : ""
     const limit = this.sql(expression.args.limit)
-    const limitSql = limit ? ` ${limit}` : ""
 
     let expressionSql: string
     if (this.RETURNING_END) {
-      expressionSql = `${fromSql}${whereSql}${returningSql}`
+      expressionSql = `${from}${where}${returningSql}`
     } else {
-      expressionSql = `${returningSql}${fromSql}${whereSql}`
+      expressionSql = `${returningSql}${from}${where}`
     }
     const optionsSql = this.expressionsFromKey(expression, "options")
     const options = optionsSql ? ` OPTION(${optionsSql})` : ""
     return this.prependCtes(
       expression,
-      `UPDATE ${this_} SET ${setSql}${expressionSql}${orderSql}${limitSql}${options}`,
+      `UPDATE ${this_} SET ${setSql}${expressionSql}${order}${limit}${options}`,
     )
   }
 
@@ -3367,9 +3305,7 @@ export class Generator {
       ? ` LIKE ${this.sql(expression.args.like)}`
       : ""
     const db = expression.args.db ? ` IN ${this.sql(expression.args.db)}` : ""
-    const where = expression.args.where
-      ? ` ${this.sql(expression.args.where)}`
-      : ""
+    const where = this.sql(expression.args.where)
     return `SHOW${full}${terse} ${name}${targetSql}${like}${db}${where}`
   }
 
@@ -4232,13 +4168,14 @@ export class Generator {
 
   protected jsonarrayagg_sql(expression: exp.JSONArrayAgg): string {
     const thisSql = this.sql(expression.args.this)
-    const order = this.sql(expression.args.order)
+    const orderExpr = expression.args.order as exp.Order | undefined
+    const order = orderExpr ? ` ${this.order_sql(orderExpr, true)}` : ""
     const nullHandling = expression.args.null_handling
     const nullHandlingSql = nullHandling ? ` ${nullHandling}` : ""
     const returnType = this.sql(expression.args.return_type)
     const returnTypeSql = returnType ? ` RETURNING ${returnType}` : ""
     const strict = expression.args.strict ? " STRICT" : ""
-    return `${this.normalizeFunc("JSON_ARRAYAGG")}(${thisSql}${order ? ` ${order}` : ""}${nullHandlingSql}${returnTypeSql}${strict})`
+    return `${this.normalizeFunc("JSON_ARRAYAGG")}(${thisSql}${order}${nullHandlingSql}${returnTypeSql}${strict})`
   }
 
   protected jsonvalue_sql(expression: exp.JSONValue): string {
@@ -4486,22 +4423,7 @@ export class Generator {
       const sql = this.sql(e)
       if (!sql) continue
 
-      const comments =
-        e instanceof exp.Expression ? this.maybeComment("", e) : ""
-
-      if (this.pretty) {
-        if (this.leadingComma) {
-          resultSqls.push(`${i > 0 ? sep : ""}${prefix}${sql}${comments}`)
-        } else {
-          const sepPart =
-            i + 1 < numSqls ? (comments ? sep.trimEnd() : sep) : ""
-          resultSqls.push(`${prefix}${sql}${sepPart}${comments}`)
-        }
-      } else {
-        resultSqls.push(
-          `${prefix}${sql}${comments}${i + 1 < numSqls ? sep : ""}`,
-        )
-      }
+      resultSqls.push(`${prefix}${sql}${i + 1 < numSqls ? sep : ""}`)
     }
 
     let resultSql: string
@@ -4520,9 +4442,17 @@ export class Generator {
       : resultSql
   }
 
-  protected op_expressions(op: string, expression: exp.Expression): string {
-    const expressionsSql = this.expressions(expression.expressions)
-    return expressionsSql ? `${op} ${expressionsSql}` : op
+  protected op_expressions(
+    op: string,
+    expression: exp.Expression,
+    flat = false,
+  ): string {
+    flat = flat || expression.parent instanceof exp.Properties
+    const expressionsSql = this.expressions(expression, { flat })
+    if (flat) {
+      return expressionsSql ? `${op} ${expressionsSql}` : op
+    }
+    return `${this.seg(op)}${expressionsSql ? this.sep() : ""}${expressionsSql}`
   }
 
   normalizeFunc(name: string): string {
@@ -4535,9 +4465,12 @@ export class Generator {
   funcCall(name: string, args: ArgValue[]): string {
     const argSqls: string[] = []
     for (const a of args) {
-      let sql = this.sql(a)
-      if (a instanceof exp.Order && !a.args.this) {
-        sql = ` ${sql}`
+      let sql: string
+      if (a instanceof exp.Order) {
+        const orderSql = this.order_sql(a, true)
+        sql = a.args.this ? orderSql : ` ${orderSql}`
+      } else {
+        sql = this.sql(a)
       }
       argSqls.push(sql)
     }
@@ -4680,6 +4613,27 @@ export class Generator {
     return `'${this.escape_str(value)}'`
   }
 
+  protected canQuote(expression: exp.Identifier): boolean {
+    if (expression.quoted) return true
+    if (!this.identify) return false
+    if (expression.parent instanceof exp.Func) return false
+    if (this.identify === true) return true
+    // identify === "safe": quote identifiers that are case-insensitive
+    // Default normalization is LOWERCASE, so uppercase chars are case-sensitive
+    const name = expression.name
+    const isCaseSensitive = /[A-Z]/.test(name)
+    const isSafe = !isCaseSensitive && /^[_a-zA-Z]\w*$/.test(name)
+    return isSafe
+  }
+
+  protected noIdentify<T>(fn: () => T): T {
+    const original = this.identify
+    this.identify = false
+    const result = fn()
+    this.identify = original
+    return result
+  }
+
   protected shouldQuote(name: string): boolean {
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
       return true
@@ -4694,7 +4648,7 @@ export class Generator {
 
   protected nextvaluefor_sql(expression: exp.NextValueFor): string {
     const order = expression.args.order as exp.Order | undefined
-    const orderSql = order ? ` OVER (${this.order_sql(order)})` : ""
+    const orderSql = order ? ` OVER (${this.order_sql(order, true)})` : ""
     return `NEXT VALUE FOR ${this.sql(expression.args.this)}${orderSql}`
   }
 

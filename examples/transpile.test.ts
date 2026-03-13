@@ -1,5 +1,5 @@
-import { describe, test } from "node:test"
 import { deepStrictEqual, strictEqual } from "node:assert/strict"
+import { describe, test } from "node:test"
 import { transpile, transpileOne } from "sqlglot-ts"
 import "sqlglot-ts/dialects/duckdb"
 import "sqlglot-ts/dialects/postgres"
@@ -23,7 +23,7 @@ describe("transpile", () => {
   test("pretty option adds newlines", () => {
     const sql = transpileOne("SELECT a FROM t WHERE x = 1", { pretty: true })
 
-    strictEqual(sql, "SELECT\n  a\nFROM t\nWHERE x = 1")
+    strictEqual(sql, "SELECT\n  a\nFROM t\nWHERE\n  x = 1")
   })
 
   test("identity transpile (no dialect specified)", () => {

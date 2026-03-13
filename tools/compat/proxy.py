@@ -9,11 +9,23 @@ from compat.errors import Expression
 from compat.errors import UnsupportedError
 
 _convert_handler: Callable[[Any], Any] | None = None
+_parse_one_handler: Callable[..., Any] | None = None
+_create_datatype_handler: Callable[[str], Any] | None = None
 
 
 def set_convert_handler(handler: Callable[[Any], Any]) -> None:
     global _convert_handler  # noqa: PLW0603
     _convert_handler = handler
+
+
+def set_parse_one_handler(handler: Callable[..., Any]) -> None:
+    global _parse_one_handler  # noqa: PLW0603
+    _parse_one_handler = handler
+
+
+def set_create_datatype_handler(handler: Callable[[str], Any]) -> None:
+    global _create_datatype_handler  # noqa: PLW0603
+    _create_datatype_handler = handler
 
 
 def deserialize(data: dict) -> Any:
@@ -51,15 +63,17 @@ def serialize_arg(arg: Any) -> Any:
 
 
 def _parse_one(sql: str, read: str | None = None) -> "ExpressionProxy":
-    from compat.api import parse_one  # noqa: PLC0415
-
-    return parse_one(sql, read=read)
+    if _parse_one_handler is None:
+        msg = "_parse_one handler not initialized"
+        raise RuntimeError(msg)
+    return _parse_one_handler(sql, read=read)
 
 
 def _create_datatype(type_name: str) -> "ExpressionProxy":
-    from compat.api import create_datatype  # noqa: PLC0415
-
-    return create_datatype(type_name)
+    if _create_datatype_handler is None:
+        msg = "_create_datatype handler not initialized"
+        raise RuntimeError(msg)
+    return _create_datatype_handler(type_name)
 
 
 def _convert_value(value: Any) -> "ExpressionProxy":
@@ -437,7 +451,7 @@ class ExpressionProxy:  # noqa: PLR0904
         dialect: str | None = None,
         *,
         pretty: bool = False,
-        identify: bool = False,
+        identify: bool | str = False,
         unsupported_level: str | None = None,
         **_kwargs: Any,
     ) -> str:

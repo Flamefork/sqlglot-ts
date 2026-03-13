@@ -17,8 +17,8 @@ export {
   condition,
   convert,
   delete_,
-  except_,
   Expression,
+  except_,
   false_,
   from_,
   func,
@@ -90,6 +90,9 @@ Expression.setSqlImpl((expr, options) => {
   const genOptions: GenerateOptions = {}
   if (options?.pretty !== undefined) {
     genOptions.pretty = options.pretty
+  }
+  if (options?.identify !== undefined) {
+    genOptions.identify = options.identify
   }
   const ul = options?.unsupportedLevel
   if (ul === "IGNORE" || ul === "WARN" || ul === "RAISE") {

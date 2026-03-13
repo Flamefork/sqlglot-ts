@@ -23,14 +23,17 @@ class Validator(unittest.TestCase):
         *,
         pretty: bool = False,
         check_command_warning: bool = False,
-        identify: bool = False,
+        identify: bool | str = False,
         **_kwargs: Any,
     ) -> ExpressionProxy:
-        _ = check_command_warning
         expr = self.parse_one(sql)
+        if check_command_warning:
+            assert expr.key.lower() == "command", (  # noqa: S101
+                f"Expected Command expression for '{sql}', got {expr.key}"
+            )
         expected = write_sql if write_sql is not None else sql
         actual = expr.sql(dialect=self.dialect, pretty=pretty, identify=identify)
-        assert expected == actual  # noqa: S101
+        assert expected == actual, f"\n  expected: {expected!r}\n  actual:   {actual!r}"  # noqa: S101
         return expr
 
     def validate_all(
@@ -40,7 +43,7 @@ class Validator(unittest.TestCase):
         write: dict[str, str] | None = None,
         *,
         pretty: bool = False,
-        identify: bool = False,
+        identify: bool | str = False,
         **_kwargs: Any,
     ):
         expr = self.parse_one(sql)

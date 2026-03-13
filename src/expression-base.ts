@@ -631,6 +631,7 @@ export abstract class Expression {
         options?: {
           dialect?: unknown
           pretty?: boolean
+          identify?: boolean | "safe"
           unsupportedLevel?: string
         },
       ) => string)
@@ -642,6 +643,7 @@ export abstract class Expression {
       options?: {
         dialect?: unknown
         pretty?: boolean
+        identify?: boolean | "safe"
         unsupportedLevel?: string
       },
     ) => string,
@@ -652,6 +654,7 @@ export abstract class Expression {
   sql(options?: {
     dialect?: unknown
     pretty?: boolean
+    identify?: boolean | "safe"
     unsupportedLevel?: string
   }): string {
     if (!Expression._sqlImpl) {
