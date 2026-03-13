@@ -85,4 +85,4 @@ test-full: test test-compat-ratchet
 
 [positional-arguments]
 compat +args="--": build
-    uv run --directory {{tools_dir}} python -m pytest "$@"
+    uv run --directory {{tools_dir}} python -m pytest -c pyproject.toml "$@"
