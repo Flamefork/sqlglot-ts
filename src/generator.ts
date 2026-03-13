@@ -185,6 +185,7 @@ export const DEFAULT_FEATURES: GeneratorFeatures = {
 
 export interface GenerateOptions {
   pretty?: boolean
+  identify?: boolean | "safe"
   indent?: number
   pad?: number
   unsupportedLevel?: "IGNORE" | "WARN" | "RAISE"
@@ -580,6 +581,7 @@ export class Generator {
   protected _indent: number
   protected pad: number
   protected pretty: boolean
+  protected identify: boolean | "safe"
   protected leadingComma: boolean
   protected maxTextWidth: number
   protected version: [number, number, number]
@@ -596,6 +598,7 @@ export class Generator {
   constructor(options: GenerateOptions = {}) {
     this.options = options
     this.pretty = options.pretty ?? false
+    this.identify = options.identify ?? false
     this._indent = options.indent ?? 2
     this.pad = options.pad ?? 0
     this.leadingComma = false
@@ -732,11 +735,11 @@ export class Generator {
 
   protected identifier_sql(expression: exp.Identifier): string {
     const name = expression.name
-    if (expression.quoted) {
-      return this.quoteIdentifier(name)
-    }
-    // Quote if needed (reserved words, special chars)
-    if (this.shouldQuote(name)) {
+    if (
+      expression.quoted ||
+      this.canQuote(expression) ||
+      this.shouldQuote(name)
+    ) {
       return this.quoteIdentifier(name)
     }
     return name
@@ -2843,14 +2846,13 @@ export class Generator {
     expression: exp.UserDefinedFunction,
   ): string {
     const name = this.sql(expression.args.this)
-    const exprs = expression.expressions
-    if (expression.args.wrapped && exprs.length > 0) {
-      return `${name}(${this.expressions(exprs)})`
-    }
-    if (expression.args.wrapped) {
-      return `${name}()`
-    }
-    return name
+    const exprs = this.noIdentify(() => this.expressions(expression))
+    const exprsSql = expression.args.wrapped
+      ? this.wrap(exprs)
+      : exprs.trim()
+        ? ` ${exprs}`
+        : ""
+    return exprsSql ? `${name}${exprsSql}` : name
   }
 
   protected columndef_sql(expression: exp.ColumnDef): string {
@@ -4678,6 +4680,27 @@ export class Generator {
 
   protected quoteString(value: string): string {
     return `'${this.escape_str(value)}'`
+  }
+
+  protected canQuote(expression: exp.Identifier): boolean {
+    if (expression.quoted) return true
+    if (!this.identify) return false
+    if (expression.parent instanceof exp.Func) return false
+    if (this.identify === true) return true
+    // identify === "safe": quote identifiers that are case-insensitive
+    // Default normalization is LOWERCASE, so uppercase chars are case-sensitive
+    const name = expression.name
+    const isCaseSensitive = /[A-Z]/.test(name)
+    const isSafe = !isCaseSensitive && /^[_a-zA-Z]\w*$/.test(name)
+    return isSafe
+  }
+
+  protected noIdentify<T>(fn: () => T): T {
+    const original = this.identify
+    this.identify = false
+    const result = fn()
+    this.identify = original
+    return result
   }
 
   protected shouldQuote(name: string): boolean {

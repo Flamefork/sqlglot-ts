@@ -451,7 +451,7 @@ class ExpressionProxy:  # noqa: PLR0904
         dialect: str | None = None,
         *,
         pretty: bool = False,
-        identify: bool = False,
+        identify: bool | str = False,
         unsupported_level: str | None = None,
         **_kwargs: Any,
     ) -> str:

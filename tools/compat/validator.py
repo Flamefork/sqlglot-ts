@@ -23,7 +23,7 @@ class Validator(unittest.TestCase):
         *,
         pretty: bool = False,
         check_command_warning: bool = False,
-        identify: bool = False,
+        identify: bool | str = False,
         **_kwargs: Any,
     ) -> ExpressionProxy:
         _ = check_command_warning
@@ -40,7 +40,7 @@ class Validator(unittest.TestCase):
         write: dict[str, str] | None = None,
         *,
         pretty: bool = False,
-        identify: bool = False,
+        identify: bool | str = False,
         **_kwargs: Any,
     ):
         expr = self.parse_one(sql)
