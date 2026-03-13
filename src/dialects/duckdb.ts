@@ -266,8 +266,10 @@ function groupconcatSql(gen: Generator, e: exp.Expression): string {
     argsSql += `, ${separatorSql}`
   }
   if (order) {
-    const orderSql = gen.sql(new exp.Order({ expressions: order.expressions }))
-    argsSql += ` ${orderSql}`
+    const orderParts = order.expressions
+      .map((e: exp.Expression) => gen.sql(e))
+      .join(", ")
+    argsSql += ` ORDER BY ${orderParts}`
   }
 
   return `LISTAGG(${argsSql})`
@@ -2006,8 +2008,8 @@ export class DuckDBGenerator extends Generator {
       const name =
         func instanceof exp.PercentileCont ? "QUANTILE_CONT" : "QUANTILE_DISC"
       const orderCol = expression.find(exp.Ordered)
-      const orderExpr = expression.args.expression
-      const orderSql = orderExpr ? ` ${this.sql(orderExpr)}` : ""
+      const orderExpr = expression.args.expression as exp.Order | undefined
+      const orderSql = orderExpr ? ` ${this.order_sql(orderExpr, true)}` : ""
 
       if (orderCol) {
         const colSql = this.sql(orderCol.args.this)
@@ -2546,9 +2548,7 @@ export class DuckDBGenerator extends Generator {
     const using = usingExprs?.length
       ? ` USING ${this.expressions(usingExprs)}`
       : ""
-    const group = expression.args.group
-      ? ` ${this.sql(expression.args.group)}`
-      : ""
+    const group = this.sql(expression.args.group)
 
     return this.prependCtes(
       expression,

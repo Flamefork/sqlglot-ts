@@ -33,7 +33,7 @@ class Validator(unittest.TestCase):
             )
         expected = write_sql if write_sql is not None else sql
         actual = expr.sql(dialect=self.dialect, pretty=pretty, identify=identify)
-        assert expected == actual  # noqa: S101
+        assert expected == actual, f"\n  expected: {expected!r}\n  actual:   {actual!r}"  # noqa: S101
         return expr
 
     def validate_all(

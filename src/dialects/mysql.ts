@@ -273,9 +273,9 @@ export class MySQLGenerator extends Generator {
     const count = this.sql(expression.args.this)
     const offset = expression.args.offset
     if (offset) {
-      return `LIMIT ${this.sql(offset)}, ${count}`
+      return `${this.seg("LIMIT")} ${this.sql(offset)}, ${count}`
     }
-    return `LIMIT ${count}`
+    return `${this.seg("LIMIT")} ${count}`
   }
 
   // MySQL uses DIV for integer division
@@ -390,9 +390,7 @@ export class MySQLGenerator extends Generator {
     const like = expression.args.like
       ? ` LIKE ${this.sql(expression.args.like)}`
       : ""
-    const where = expression.args.where
-      ? ` ${this.sql(expression.args.where)}`
-      : ""
+    const where = this.sql(expression.args.where)
 
     return `SHOW${full}${global_} ${name}${target}${db}${like}${where}`
   }
