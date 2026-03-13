@@ -1,14 +1,74 @@
 [project]
 name = "sqlglot-ts-tools"
 version = "0.1.0"
-requires-python = ">=3.11"
-dependencies = ["pytz", "pytest>=8.0", "pytest-subtests>=0.14"]
+requires-python = ">=3.13"
+dependencies = [
+  "pytest>=9.0",
+  "ruff>=0.14.1",
+  "basedpyright>=1.31.7",
+  "pytz>=2026.1.post1",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = [
-    "../sqlglot/tests/dialects",
-    "../sqlglot/tests/test_build.py",
-    "../sqlglot/tests/test_expressions.py",
+  "../sqlglot/tests/dialects",
+  "../sqlglot/tests/test_build.py",
+  "../sqlglot/tests/test_expressions.py",
 ]
-addopts = "-v --tb=short -p conftest --import-mode=importlib -k 'not test_lazy_load'"
+addopts = "-v --tb=short -p compat.conftest --import-mode=importlib -k 'not test_lazy_load'"
+
+[tool.pyright]
+typeCheckingMode = "strict"
+reportUnknownArgumentType = "none"
+reportUnknownLambdaType = "none"
+reportUnknownMemberType = "none"
+reportUnknownParameterType = "none"
+reportUnknownVariableType = "none"
+reportMissingParameterType = "none"
+reportMissingTypeArgument = "none"
+reportMissingTypeStubs = "none"
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.format]
+preview = true
+
+[tool.ruff.lint]
+preview = true
+select = ["ALL"]
+ignore = [
+  "ANN",
+  "COM812",
+  "CPY",
+  "D",
+  "FIX",
+  "G004",
+  "ISC001",
+  "PLC1901",
+  "PLR0911",
+  "PLR0915",
+  "PLR6301",
+  "RUF001",
+  "RUF002",
+  "RUF003",
+  "TC006",
+  "TD",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test_*.py" = ["A002", "PLR2004", "S", "FBT"]
+"conftest.py" = ["S"]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+
+[tool.ruff.lint.pylint]
+max-args = 10
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-implicit-str-concat]
+allow-multiline = false

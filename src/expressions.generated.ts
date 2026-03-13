@@ -38,7 +38,7 @@ export class Query extends Expression {
   }
   where(...args: (string | Expression | null | undefined | BuilderOptions)[]): this {
     const { expressions, options } = _extractBuilderArgs(args);
-    return _applyConjunctionBuilder(expressions, this, 'where', { copy: options.copy ?? true, into: Where, append: options.append ?? true, dialect: options.dialect }) as this;
+    return _applyConjunctionBuilder(expressions, this, 'where', { copy: options.copy ?? true, append: options.append ?? true, into: Where, dialect: options.dialect }) as this;
   }
   get ctes(): Expression[] {
     const with_ = this.args.with_;
@@ -57,7 +57,10 @@ export class Query extends Expression {
   subquery(alias?: string): Subquery {
     const subquery = new Subquery({ this: this });
     if (alias) {
-      subquery.set("alias", new TableAlias({ this: new Identifier({ this: alias }) }));
+      subquery.set(
+        "alias",
+        new TableAlias({ this: new Identifier({ this: alias }) }),
+      );
     }
     return subquery;
   }
@@ -75,17 +78,29 @@ export class Query extends Expression {
   ): this {
     return applyCteBuilder(alias, as_, this, options);
   }
-  union(...args: (string | Expression | { distinct?: boolean })[]): Union {
+  union(
+    ...args: (string | Expression | { distinct?: boolean })[]
+  ): Union {
     const { expressions, distinct } = extractSetOperationArgs(args);
-    return applySetOperation([this, ...expressions], Union, { distinct }) as Union;
+    return applySetOperation(
+      [this, ...expressions], Union, { distinct },
+    ) as Union;
   }
-  intersect(...args: (string | Expression | { distinct?: boolean })[]): Intersect {
+  intersect(
+    ...args: (string | Expression | { distinct?: boolean })[]
+  ): Intersect {
     const { expressions, distinct } = extractSetOperationArgs(args);
-    return applySetOperation([this, ...expressions], Intersect, { distinct }) as Intersect;
+    return applySetOperation(
+      [this, ...expressions], Intersect, { distinct },
+    ) as Intersect;
   }
-  except_(...args: (string | Expression | { distinct?: boolean })[]): Except {
+  except_(
+    ...args: (string | Expression | { distinct?: boolean })[]
+  ): Except {
     const { expressions, distinct } = extractSetOperationArgs(args);
-    return applySetOperation([this, ...expressions], Except, { distinct }) as Except;
+    return applySetOperation(
+      [this, ...expressions], Except, { distinct },
+    ) as Except;
   }
 }
 
@@ -634,7 +649,7 @@ export class Delete extends DML {
   static readonly className: string = 'Delete';
   where(...args: (string | Expression | null | undefined | BuilderOptions)[]): this {
     const { expressions, options } = _extractBuilderArgs(args);
-    return _applyConjunctionBuilder(expressions, this, 'where', { copy: options.copy ?? true, into: Where, append: options.append ?? true, dialect: options.dialect }) as this;
+    return _applyConjunctionBuilder(expressions, this, 'where', { copy: options.copy ?? true, append: options.append ?? true, into: Where, dialect: options.dialect }) as this;
   }
   delete_(
     table: string | Expression,
@@ -1906,7 +1921,7 @@ export class Update extends DML {
   }
   where(...args: (string | Expression | null | undefined | BuilderOptions)[]): this {
     const { expressions, options } = _extractBuilderArgs(args);
-    return _applyConjunctionBuilder(expressions, this, 'where', { copy: options.copy ?? true, into: Where, append: options.append ?? true, dialect: options.dialect }) as this;
+    return _applyConjunctionBuilder(expressions, this, 'where', { copy: options.copy ?? true, append: options.append ?? true, into: Where, dialect: options.dialect }) as this;
   }
   from_(expression: string | Expression | number, options?: BuilderOptions): this {
     const expr = typeof expression === 'number' ? `${expression}` : expression;
@@ -1986,7 +2001,7 @@ export class Select extends Query {
   }
   having(...args: (string | Expression | null | undefined | BuilderOptions)[]): this {
     const { expressions, options } = _extractBuilderArgs(args);
-    return _applyConjunctionBuilder(expressions, this, 'having', { copy: options.copy ?? true, into: Having, append: options.append ?? true, dialect: options.dialect }) as this;
+    return _applyConjunctionBuilder(expressions, this, 'having', { copy: options.copy ?? true, append: options.append ?? true, into: Having, dialect: options.dialect }) as this;
   }
   window(...args: (string | Expression | BuilderOptions)[]): this {
     const { expressions, options } = _extractBuilderArgs(args);
@@ -1994,7 +2009,7 @@ export class Select extends Query {
   }
   qualify(...args: (string | Expression | null | undefined | BuilderOptions)[]): this {
     const { expressions, options } = _extractBuilderArgs(args);
-    return _applyConjunctionBuilder(expressions, this, 'qualify', { copy: options.copy ?? true, into: Qualify, append: options.append ?? true, dialect: options.dialect }) as this;
+    return _applyConjunctionBuilder(expressions, this, 'qualify', { copy: options.copy ?? true, append: options.append ?? true, into: Qualify, dialect: options.dialect }) as this;
   }
   override get namedSelects(): string[] {
     return this.expressions.map((expression) => expression.outputName);
@@ -2064,7 +2079,8 @@ export class Select extends Query {
       }
     }
     if (options?.on) {
-      const onValues = globalThis.Array.isArray(options.on) ? options.on : [options.on];
+      const onValues = globalThis.Array.isArray(options.on)
+        ? options.on : [options.on];
       join = _applyConjunctionBuilder(onValues, join, "on", {
         append: true,
         copy: false,
@@ -2072,7 +2088,8 @@ export class Select extends Query {
       });
     }
     if (options?.using) {
-      const usingValues = globalThis.Array.isArray(options.using) ? options.using : [options.using];
+      const usingValues = globalThis.Array.isArray(options.using)
+        ? options.using : [options.using];
       const usingExpressions = usingValues.map((value) =>
         typeof value === "string" ? new Identifier({ this: value }) : value,
       );
@@ -2130,7 +2147,11 @@ export class Select extends Query {
       into: Table,
       dialect: options?.dialect,
     });
-    return new Create({ this: tableExpression, kind: "TABLE", expression: instance });
+    return new Create({
+      this: tableExpression,
+      kind: "TABLE",
+      expression: instance,
+    });
   }
   lock(update = true, copy = true): this {
     const instance = copy ? (this.copy() as this) : this;
@@ -2139,7 +2160,9 @@ export class Select extends Query {
   }
   hint(...hints: (string | Expression)[]): this {
     const instance = this.copy() as this;
-    instance.set("hint", new Hint({ expressions: hints.map((hint) => maybeParse(hint)) }));
+    instance.set("hint", new Hint({
+      expressions: hints.map((hint) => maybeParse(hint)),
+    }));
     return instance;
   }
 }
@@ -2776,7 +2799,8 @@ export class Func extends Condition {
   static readonly className: string = 'Func';
   static readonly sqlNames: readonly string[] | undefined = undefined;
   override get name(): string {
-    const ctor = this.constructor as typeof Func & { readonly sqlNames?: readonly string[] };
+    const ctor = this.constructor as typeof Func
+      & { readonly sqlNames?: readonly string[] };
     const first = ctor.sqlNames?.[0];
     if (first) {
       return first;
@@ -3625,9 +3649,16 @@ export class Case extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': false, 'ifs': true, 'default': false };
   override get key(): string { return 'case'; }
   static readonly className: string = 'Case';
-  when(condition: string | Expression, then: string | Expression, copy = true): this {
+  when(
+    condition: string | Expression,
+    then: string | Expression,
+    copy = true,
+  ): this {
     const instance = copy ? (this.copy() as this) : this;
-    instance.append("ifs", new If({ this: maybeParse(condition), true: maybeParse(then) }));
+    instance.append("ifs", new If({
+      this: maybeParse(condition),
+      true: maybeParse(then),
+    }));
     return instance;
   }
   else_(condition: string | Expression, copy = true): this {
