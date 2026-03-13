@@ -4,7 +4,25 @@ on:
   push:
 
 jobs:
-  test:
+  fast-checks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Fast verify
+        run: npm run verify:fast
+  packaging-and-shape:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,17 +40,15 @@ jobs:
         uses: astral-sh/setup-uv@v6
       - name: Install
         run: npm ci
-      - name: Build
-        run: npm run build
-      - name: Test
-        run: npm test
-      - name: Packaging test
+      - name: Packaging smoke
         run: npm run test:packaging
       - name: Check codegen freshness
-        run: npm run generate && git diff --exit-code src/expressions.generated.ts
+        run: npm run check:codegen
+      - name: Check API surface
+        run: npm run check:api-surface
   publish:
     if: startsWith(github.event.ref, 'refs/tags/v')
-    needs: test
+    needs: [fast-checks, packaging-and-shape]
     runs-on: ubuntu-latest
     environment: npm
     permissions:

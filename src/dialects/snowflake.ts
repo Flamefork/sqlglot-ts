@@ -3,15 +3,15 @@
  */
 
 import {
-  Dialect,
   buildEscapedSequences,
   buildUnescapedSequences,
+  Dialect,
 } from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
-import { FunctionBuilder, Parser } from "../parser.js"
-import { TokenType, Tokenizer } from "../tokens.js"
+import { type FunctionBuilder, Parser } from "../parser.js"
+import { Tokenizer, TokenType } from "../tokens.js"
 import {
   dateDeltaSql,
   datestrtodate_sql,
@@ -479,6 +479,9 @@ export class SnowflakeGenerator extends Generator {
     AGGREGATE_FILTER_SUPPORTED: false,
   }
 
+  protected override MATCHED_BY_SOURCE = false
+  protected override JSON_KEY_VALUE_PAIR_SEP = ","
+
   static override TRANSFORMS: Map<ExpressionClass, Transform> = new Map<
     ExpressionClass,
     Transform
@@ -499,9 +502,10 @@ export class SnowflakeGenerator extends Generator {
       exp.ApproxQuantile,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.ApproxQuantile
-        const thisExpr = expr.args.this as exp.Expression
-        const quantile = expr.args.quantile as exp.Expression
-        return gen.funcCall("APPROX_PERCENTILE", [thisExpr, quantile])
+        return gen.funcCall("APPROX_PERCENTILE", [
+          expr.args.this,
+          expr.args.quantile,
+        ])
       },
     ],
     [exp.TimeAdd, dateDeltaSql("TIMEADD")],
@@ -526,8 +530,8 @@ export class SnowflakeGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.AtTimeZone
         return gen.funcCall("CONVERT_TIMEZONE", [
-          expr.args.zone as exp.Expression,
-          expr.args.this as exp.Expression,
+          expr.args.zone,
+          expr.args.this,
         ])
       },
     ],
@@ -535,10 +539,8 @@ export class SnowflakeGenerator extends Generator {
       exp.If,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.If
-        const falseVal = expr.args.false
-          ? gen.sql(expr.args.false as exp.Expression)
-          : "NULL"
-        return `IFF(${gen.sql(expr.args.this as exp.Expression)}, ${gen.sql(expr.args.true as exp.Expression)}, ${falseVal})`
+        const falseVal = expr.args.false ? gen.sql(expr.args.false) : "NULL"
+        return `IFF(${gen.sql(expr.args.this)}, ${gen.sql(expr.args.true)}, ${falseVal})`
       },
     ],
     // MD5/SHA TRANSFORMS
@@ -552,10 +554,7 @@ export class SnowflakeGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.SHA2Digest
         const length = expr.args.length ?? exp.Literal.number(256)
-        return gen.funcCall("SHA2_BINARY", [
-          expr.args.this as exp.Expression,
-          length as exp.Expression,
-        ])
+        return gen.funcCall("SHA2_BINARY", [expr.args.this, length])
       },
     ],
     // Other TRANSFORMS
@@ -624,8 +623,8 @@ export class SnowflakeGenerator extends Generator {
           (expr.args.position as exp.Expression | undefined) ||
           (occurrence ? exp.Literal.number(1) : undefined)
         return gen.funcCall("REGEXP_SUBSTR", [
-          expr.args.this as exp.Expression,
-          expr.args.expression as exp.Expression,
+          expr.args.this,
+          expr.args.expression,
           ...(position ? [position] : []),
           ...(occurrence ? [occurrence] : []),
           ...(parameters ? [parameters] : []),
@@ -638,9 +637,7 @@ export class SnowflakeGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expression = e as exp.GroupConcat
         let thisExpr = expression.args.this as exp.Expression
-        const separator = expression.args.separator as
-          | exp.Expression
-          | undefined
+        const separator = expression.args.separator
         const separatorSql = separator ? gen.sql(separator) : ""
 
         let order: exp.Order | undefined
@@ -710,15 +707,15 @@ export class SnowflakeGenerator extends Generator {
 
   // Snowflake uses :: for type casting (like PostgreSQL)
   protected override cast_sql(expression: exp.Cast): string {
-    const expr = this.sql(expression.args.this as exp.Expression)
-    const to = this.sql(expression.args.to as exp.Expression)
+    const expr = this.sql(expression.args.this)
+    const to = this.sql(expression.args.to)
     return `CAST(${expr} AS ${to})`
   }
 
   // Snowflake uses TRY_CAST
   protected override trycast_sql(expression: exp.TryCast): string {
-    const expr = this.sql(expression.args.this as exp.Expression)
-    const to = this.sql(expression.args.to as exp.Expression)
+    const expr = this.sql(expression.args.this)
+    const to = this.sql(expression.args.to)
     return `TRY_CAST(${expr} AS ${to})`
   }
 
@@ -752,7 +749,7 @@ export class SnowflakeGenerator extends Generator {
     let sql = this.binary_sql(expression, "ILIKE")
     const escapeExpr = expression.args.escape
     if (escapeExpr) {
-      sql += ` ESCAPE ${this.sql(escapeExpr as exp.Expression)}`
+      sql += ` ESCAPE ${this.sql(escapeExpr)}`
     }
     return sql
   }
@@ -802,7 +799,7 @@ export class SnowflakeGenerator extends Generator {
         : `TABLE(FLATTEN(${tableInput}))`
 
     const alias = expression.args.alias
-      ? ` AS ${this.sql(expression.args.alias as exp.Expression)}`
+      ? ` AS ${this.sql(expression.args.alias)}`
       : ""
 
     const valueSql =
@@ -817,7 +814,7 @@ export class SnowflakeGenerator extends Generator {
 
   protected parsejson_sql(expression: exp.ParseJSON): string {
     const name = expression.args.safe ? "TRY_PARSE_JSON" : "PARSE_JSON"
-    return this.funcCall(name, [expression.args.this as exp.Expression])
+    return this.funcCall(name, [expression.args.this])
   }
 
   protected override jsonextract_sql(expression: exp.JSONExtract): string {
@@ -828,10 +825,7 @@ export class SnowflakeGenerator extends Generator {
     ) {
       thisExpr = new exp.ParseJSON({ this: thisExpr })
     }
-    return this.funcCall("GET_PATH", [
-      thisExpr,
-      expression.args.expression as exp.Expression,
-    ])
+    return this.funcCall("GET_PATH", [thisExpr, expression.args.expression])
   }
 
   protected override jsonextractscalar_sql(
@@ -844,10 +838,7 @@ export class SnowflakeGenerator extends Generator {
     ) {
       thisExpr = new exp.ParseJSON({ this: thisExpr })
     }
-    return this.funcCall("GET_PATH", [
-      thisExpr,
-      expression.args.expression as exp.Expression,
-    ])
+    return this.funcCall("GET_PATH", [thisExpr, expression.args.expression])
   }
 }
 

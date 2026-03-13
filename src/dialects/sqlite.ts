@@ -83,6 +83,9 @@ export class SQLiteGenerator extends Generator {
     ["VARBINARY", "BLOB"],
   ])
 
+  protected override JSON_KEY_VALUE_PAIR_SEP = ","
+  protected override JSON_PATH_BRACKETED_KEY_SUPPORTED = false
+
   static override TRANSFORMS: Map<ExpressionClass, Transform> = new Map<
     ExpressionClass,
     Transform
@@ -92,14 +95,14 @@ export class SQLiteGenerator extends Generator {
     [
       exp.TimeStrToTime,
       (gen: Generator, e: exp.Expression) =>
-        gen.sql((e as exp.TimeStrToTime).args.this as exp.Expression),
+        gen.sql(e.args.this as exp.Expression),
     ],
     [
       exp.TryCast,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.TryCast
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
-        const to = gen.sql(expr.args.to as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
+        const to = gen.sql(expr.args.to)
         return `CAST(${thisExpr} AS ${to})`
       },
     ],
@@ -107,11 +110,11 @@ export class SQLiteGenerator extends Generator {
 
   protected override ignorenulls_sql(expression: exp.IgnoreNulls): string {
     this.unsupported("SQLite does not support IGNORE NULLS.")
-    return this.sql(expression.args.this as exp.Expression)
+    return this.sql(expression.args.this)
   }
 
   protected override respectnulls_sql(expression: exp.RespectNulls): string {
-    return this.sql(expression.args.this as exp.Expression)
+    return this.sql(expression.args.this)
   }
 
   protected dateadd_sql(expression: exp.DateAdd): string {
@@ -130,7 +133,7 @@ export class SQLiteGenerator extends Generator {
     const modifierWithUnit = unitName
       ? `'${modifierSql} ${unitName}'`
       : `'${modifierSql}'`
-    return `DATE(${this.sql(expression.args.this as exp.Expression)}, ${modifierWithUnit})`
+    return `DATE(${this.sql(expression.args.this)}, ${modifierWithUnit})`
   }
 
   protected datediff_sql(expression: exp.DateDiff): string {
@@ -142,8 +145,8 @@ export class SQLiteGenerator extends Generator {
           ? unitArg.toUpperCase()
           : "DAY"
 
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
-    const exprExpr = this.sql(expression.args.expression as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
+    const exprExpr = this.sql(expression.args.expression)
     let sql = `(JULIANDAY(${thisExpr}) - JULIANDAY(${exprExpr}))`
 
     if (unit === "MONTH") {

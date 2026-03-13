@@ -56,6 +56,9 @@ export class DatabricksGenerator extends SparkGenerator {
     SAFE_DIVISION: false,
   }
 
+  protected override QUOTE_JSON_PATH = false
+  protected override JSON_PATH_SINGLE_QUOTE_ESCAPE = false
+
   static override TRANSFORMS: Map<ExpressionClass, Transform> = new Map<
     ExpressionClass,
     Transform

@@ -2,13 +2,13 @@
  * Dialect system for SQL parsing and generation
  */
 
-import type { Expression } from "./expressions.js"
+import type { Expression, ExpressionClass } from "./expressions.js"
 import * as exp from "./expressions.js"
 import { type GenerateOptions, Generator } from "./generator.js"
 import { Parser, type ParserOptions } from "./parser.js"
 import { formatTime } from "./time.js"
 import { Tokenizer, type TokenizerOptions } from "./tokens.js"
-import { type Trie, newTrie } from "./trie.js"
+import { newTrie, type Trie } from "./trie.js"
 
 export interface DialectOptions {
   tokenizer?: TokenizerOptions
@@ -102,17 +102,19 @@ export class Dialect {
   private static _INVERSE_TIME_TRIE: Trie | null = null
 
   static get TIME_TRIE(): Trie {
-    if (!this._TIME_TRIE) {
-      this._TIME_TRIE = newTrie([...this.TIME_MAPPING.keys()])
+    if (!Dialect._TIME_TRIE) {
+      Dialect._TIME_TRIE = newTrie([...Dialect.TIME_MAPPING.keys()])
     }
-    return this._TIME_TRIE
+    return Dialect._TIME_TRIE
   }
 
   static get INVERSE_TIME_TRIE(): Trie {
-    if (!this._INVERSE_TIME_TRIE) {
-      this._INVERSE_TIME_TRIE = newTrie([...this.INVERSE_TIME_MAPPING.keys()])
+    if (!Dialect._INVERSE_TIME_TRIE) {
+      Dialect._INVERSE_TIME_TRIE = newTrie([
+        ...Dialect.INVERSE_TIME_MAPPING.keys(),
+      ])
     }
-    return this._INVERSE_TIME_TRIE
+    return Dialect._INVERSE_TIME_TRIE
   }
 
   static formatTime(
@@ -121,7 +123,7 @@ export class Dialect {
     if (typeof expression === "string") {
       const unquoted = expression.slice(1, -1)
       return exp.Literal.string(
-        formatTime(unquoted, this.TIME_MAPPING, this.TIME_TRIE),
+        formatTime(unquoted, Dialect.TIME_MAPPING, Dialect.TIME_TRIE),
       )
     }
 
@@ -133,8 +135,8 @@ export class Dialect {
       return exp.Literal.string(
         formatTime(
           String(expression.args.this),
-          this.TIME_MAPPING,
-          this.TIME_TRIE,
+          Dialect.TIME_MAPPING,
+          Dialect.TIME_TRIE,
         ),
       )
     }
@@ -312,6 +314,14 @@ export class Dialect {
   parseOne(sql: string): Expression {
     const parser = this.createParser()
     return parser.parseOne(sql)
+  }
+
+  parseInto(
+    expressionTypes: ExpressionClass | ExpressionClass[],
+    sql: string,
+  ): Expression[] {
+    const parser = this.createParser()
+    return parser.parseInto(expressionTypes, sql)
   }
 
   generate(expression: Expression, options?: GenerateOptions): string {

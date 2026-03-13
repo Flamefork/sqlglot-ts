@@ -7,7 +7,7 @@ import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
 import { Parser } from "../parser.js"
-import { TokenType, Tokenizer } from "../tokens.js"
+import { Tokenizer, TokenType } from "../tokens.js"
 import { eliminateQualify, preprocess } from "../transforms.js"
 
 type Transform = (generator: Generator, expression: exp.Expression) => string
@@ -39,10 +39,20 @@ export class OracleGenerator extends Generator {
     ["ROWVERSION", "BLOB"],
   ])
 
+  protected override ON_CONDITION_EMPTY_BEFORE_ERROR = false
+
   static override TRANSFORMS: Map<ExpressionClass, Transform> = new Map<
     ExpressionClass,
     Transform
   >([...Generator.TRANSFORMS, [exp.Select, preprocess([eliminateQualify])]])
+
+  protected override subquery_sql(expression: exp.Subquery): string {
+    return super.subquery_sql(expression, " ")
+  }
+
+  protected override table_sql(expression: exp.Table): string {
+    return super.table_sql(expression, " ")
+  }
 
   // Oracle uses double quotes for identifier quoting
   protected override quoteIdentifier(name: string): string {

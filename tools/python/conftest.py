@@ -9,29 +9,24 @@ import sys
 from pathlib import Path
 
 # Add this file's directory to path so we can import fake_sqlglot
-CONFTEST_DIR = Path(__file__).parent
+CONFTEST_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(CONFTEST_DIR))
 
 import pytest
 
-# Determine project root based on where conftest is located
-# It might be in tools/ or in sqlglot/tests/dialects/
-if CONFTEST_DIR.name == "tools":
-    PROJECT_ROOT = CONFTEST_DIR.parent
+# Determine project root based on where conftest is located.
+if CONFTEST_DIR.name == "python" and CONFTEST_DIR.parent.name == "tools":
+    PROJECT_ROOT = CONFTEST_DIR.parent.parent
 else:
     # Running from sqlglot/tests/dialects/ -> go up to sqlglot-ts
     # dialects -> tests -> sqlglot -> sqlglot-ts (3 levels)
     PROJECT_ROOT = CONFTEST_DIR.parent.parent.parent
-    # Add tools to path for ts_bridge and other imports
-    sys.path.insert(0, str(PROJECT_ROOT / "tools"))
+    sys.path.insert(0, str(PROJECT_ROOT / "tools" / "python"))
 
 
 def pytest_configure(config):
     import types
 
-    print("\n=== SQLGLOT-TS CONFTEST LOADED ===\n")
-
-    print("Building TypeScript...")
     build = subprocess.run(
         ["npm", "run", "build"],
         cwd=PROJECT_ROOT,
@@ -43,7 +38,6 @@ def pytest_configure(config):
 
     # Register fake sqlglot BEFORE test collection
     from fake_sqlglot import register_fake_sqlglot, TSBridge
-    print("Registering fake sqlglot module...")
     register_fake_sqlglot()
 
     # Register tests.dialects.test_dialect module with Validator
@@ -61,7 +55,7 @@ def pytest_configure(config):
     tests_test_dialect.Validator = Validator  # type: ignore
     sys.modules["tests.dialects.test_dialect"] = tests_test_dialect
 
-    print("Starting TS bridge...")
+
     TSBridge.get()
 
 

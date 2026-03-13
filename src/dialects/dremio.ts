@@ -206,7 +206,7 @@ export class DremioGenerator extends Generator {
       exp.TimeToStr,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.TimeToStr
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const fmtExpr = expr.args.format as exp.Expression | undefined
         if (fmtExpr instanceof exp.Literal && fmtExpr.args.is_string) {
           const converted = formatTime(
@@ -215,7 +215,7 @@ export class DremioGenerator extends Generator {
           )
           return `TO_CHAR(${thisExpr}, '${converted}')`
         }
-        const format = gen.sql(fmtExpr as exp.Expression)
+        const format = gen.sql(fmtExpr)
         return `TO_CHAR(${thisExpr}, ${format})`
       },
     ],

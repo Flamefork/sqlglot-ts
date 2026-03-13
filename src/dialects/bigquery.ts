@@ -3,16 +3,16 @@
  */
 
 import {
-  Dialect,
   buildEscapedSequences,
   buildUnescapedSequences,
+  Dialect,
 } from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
-import { FunctionBuilder, Parser } from "../parser.js"
+import { type FunctionBuilder, Parser } from "../parser.js"
 import { formatTime } from "../time.js"
-import { TokenType, Tokenizer } from "../tokens.js"
+import { Tokenizer, TokenType } from "../tokens.js"
 import {
   datestrtodate_sql,
   eliminateSemiAndAntiJoins,
@@ -32,7 +32,7 @@ function bqJsonExtractSql(gen: Generator, e: exp.Expression): string {
   const name =
     (e._meta && (e._meta["name"] as string)) ||
     (e as exp.Func).name.toUpperCase()
-  const args: exp.Expression[] = [e.args.this as exp.Expression]
+  const args = [e.args.this]
   const expr = e.args.expression as exp.Expression | undefined
   if (expr) args.push(expr)
   return gen.funcCall(name, args)
@@ -399,6 +399,9 @@ export class BigQueryGenerator extends Generator {
     ["%H:%M:%S.%f", "%H:%M:%E6S"],
   ])
 
+  protected override JSON_KEY_VALUE_PAIR_SEP = ","
+  protected override JSON_PATH_SINGLE_QUOTE_ESCAPE = true
+
   static override TRANSFORMS: Map<ExpressionClass, Transform> = new Map<
     ExpressionClass,
     Transform
@@ -415,7 +418,7 @@ export class BigQueryGenerator extends Generator {
         ],
         (gen: Generator, expr: exp.Expression) => {
           // Call select_sql directly without checking TRANSFORMS again
-          return (gen as any).select_sql(expr)
+          return gen.select_sql(expr as exp.Select)
         },
       ),
     ],
@@ -429,7 +432,7 @@ export class BigQueryGenerator extends Generator {
             ? unit.name
             : gen.sql(unit)
         const args: exp.Expression[] = [expr.args.this as exp.Expression]
-        const zone = expr.args.zone as exp.Expression | undefined
+        const zone = expr.args.zone
         return `DATE_TRUNC(${gen.sql(args[0]!)}, ${unitSql}${zone ? `, ${gen.sql(zone)}` : ""})`
       },
     ],
@@ -438,9 +441,9 @@ export class BigQueryGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.DateFromParts
         return gen.funcCall("DATE", [
-          expr.args.year as exp.Expression,
-          expr.args.month as exp.Expression,
-          expr.args.day as exp.Expression,
+          expr.args.year,
+          expr.args.month,
+          expr.args.day,
         ])
       },
     ],
@@ -451,7 +454,7 @@ export class BigQueryGenerator extends Generator {
         const scale = expr.args.scale as exp.Literal | undefined
         const scaleValue =
           scale instanceof exp.Literal ? String(scale.value) : undefined
-        const timestamp = expr.args.this as exp.Expression
+        const timestamp = expr.args.this
         if (scaleValue === "3") {
           return gen.funcCall("TIMESTAMP_MILLIS", [timestamp])
         }
@@ -484,12 +487,8 @@ export class BigQueryGenerator extends Generator {
           exp.TsOrDsToTime,
         ] as const
         const isWrapped = TS_OR_DS_TYPES.some((t) => inner instanceof t)
-        const valueExpr = isWrapped
-          ? gen.sql(inner.args.this as exp.Expression)
-          : gen.sql(inner)
-        const zone = expr.args.zone
-          ? `, ${gen.sql(expr.args.zone as exp.Expression)}`
-          : ""
+        const valueExpr = isWrapped ? gen.sql(inner.args.this) : gen.sql(inner)
+        const zone = expr.args.zone ? `, ${gen.sql(expr.args.zone)}` : ""
         return `${funcName}(${fmt}, ${valueExpr}${zone})`
       },
     ],
@@ -497,9 +496,7 @@ export class BigQueryGenerator extends Generator {
       exp.StrToTime,
       (gen: Generator, e: exp.Expression) => {
         const fmt = gen.formatTimeStr(e)
-        const thisExpr = gen.sql(
-          (e as exp.StrToTime).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this)
         return `PARSE_TIMESTAMP(${fmt}, ${thisExpr})`
       },
     ],
@@ -507,26 +504,24 @@ export class BigQueryGenerator extends Generator {
       exp.StrToDate,
       (gen: Generator, e: exp.Expression) => {
         const fmt = gen.formatTimeStr(e)
-        const thisExpr = gen.sql(
-          (e as exp.StrToDate).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this)
         return `PARSE_DATE(${fmt}, ${thisExpr})`
       },
     ],
     [
       exp.BitwiseAndAgg,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("BIT_AND", [(e as exp.Func).args.this as exp.Expression]),
+        gen.funcCall("BIT_AND", [e.args.this]),
     ],
     [
       exp.BitwiseOrAgg,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("BIT_OR", [(e as exp.Func).args.this as exp.Expression]),
+        gen.funcCall("BIT_OR", [e.args.this]),
     ],
     [
       exp.BitwiseXorAgg,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("BIT_XOR", [(e as exp.Func).args.this as exp.Expression]),
+        gen.funcCall("BIT_XOR", [e.args.this]),
     ],
     [exp.RegexpReplace, regexpReplaceSql],
     [exp.JSONExtract, bqJsonExtractSql],
@@ -535,28 +530,22 @@ export class BigQueryGenerator extends Generator {
     [
       exp.UnixSeconds,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("UNIX_SECONDS", [
-          (e as exp.UnixSeconds).args.this as exp.Expression,
-        ]),
+        gen.funcCall("UNIX_SECONDS", [e.args.this]),
     ],
     [
       exp.UnixMillis,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("UNIX_MILLIS", [
-          (e as exp.UnixMillis).args.this as exp.Expression,
-        ]),
+        gen.funcCall("UNIX_MILLIS", [e.args.this]),
     ],
     [
       exp.UnixMicros,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("UNIX_MICROS", [
-          (e as exp.UnixMicros).args.this as exp.Expression,
-        ]),
+        gen.funcCall("UNIX_MICROS", [e.args.this]),
     ],
     [
       exp.SHA,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("SHA1", [(e as exp.SHA).args.this as exp.Expression]),
+        gen.funcCall("SHA1", [e.args.this]),
     ],
     [
       exp.SHA2,
@@ -565,7 +554,7 @@ export class BigQueryGenerator extends Generator {
         const length = String(
           (expr.args.length as exp.Expression | undefined)?.args?.this ?? "256",
         )
-        return gen.funcCall(`SHA${length}`, [expr.args.this as exp.Expression])
+        return gen.funcCall(`SHA${length}`, [expr.args.this])
       },
     ],
     [
@@ -575,7 +564,7 @@ export class BigQueryGenerator extends Generator {
         const length = String(
           (expr.args.length as exp.Expression | undefined)?.args?.this ?? "256",
         )
-        return gen.funcCall(`SHA${length}`, [expr.args.this as exp.Expression])
+        return gen.funcCall(`SHA${length}`, [expr.args.this])
       },
     ],
     [
@@ -607,9 +596,7 @@ export class BigQueryGenerator extends Generator {
     [
       exp.CountIf,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("COUNTIF", [
-          (e as exp.CountIf).args.this as exp.Expression,
-        ]),
+        gen.funcCall("COUNTIF", [e.args.this]),
     ],
     [exp.Uuid, (_gen: Generator, _e: exp.Expression) => "GENERATE_UUID()"],
     [exp.TimeStrToTime, timestrtotime_sql],
@@ -618,17 +605,14 @@ export class BigQueryGenerator extends Generator {
     [
       exp.IntDiv,
       (gen: Generator, e: exp.Expression) =>
-        gen.funcCall("DIV", [
-          (e as exp.IntDiv).args.this as exp.Expression,
-          (e as exp.IntDiv).args.expression as exp.Expression,
-        ]),
+        gen.funcCall("DIV", [e.args.this, e.args.expression]),
     ],
     [exp.VariancePop, renameFunc("VAR_POP")],
     [exp.ApproxDistinct, renameFunc("APPROX_COUNT_DISTINCT")],
     [
       exp.HexString,
       (gen: Generator, e: exp.Expression) =>
-        (gen as any).hexstring_sql(e as exp.HexString, "FROM_HEX"),
+        gen.hexstring_sql(e as exp.HexString, "FROM_HEX"),
     ],
   ])
 
@@ -651,8 +635,8 @@ export class BigQueryGenerator extends Generator {
   }
 
   protected override attimezone_sql(expression: exp.AtTimeZone): string {
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
-    const zone = this.sql(expression.args.zone as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
+    const zone = this.sql(expression.args.zone)
     return `TIMESTAMP(DATETIME(${thisExpr}, ${zone}))`
   }
 
@@ -663,9 +647,13 @@ export class BigQueryGenerator extends Generator {
 
   // BigQuery uses SAFE_CAST for TRY_CAST
   protected override trycast_sql(expression: exp.TryCast): string {
-    const expr = this.sql(expression.args.this as exp.Expression)
-    const to = this.sql(expression.args.to as exp.Expression)
+    const expr = this.sql(expression.args.this)
+    const to = this.sql(expression.args.to)
     return `SAFE_CAST(${expr} AS ${to})`
+  }
+
+  protected override inUnnestOp(unnest: exp.Expression): string {
+    return this.sql(unnest)
   }
 
   // BigQuery uses || for string concatenation (like PostgreSQL)
@@ -692,7 +680,7 @@ export class BigQueryGenerator extends Generator {
     const exprs = expression.expressions.map((e) => {
       if (e instanceof exp.PropertyEQ) {
         const key = e.args.this as exp.Expression
-        const value = e.args.expression as exp.Expression
+        const value = e.args.expression
         const keyStr =
           key instanceof exp.Identifier
             ? String(key.args.this ?? "")
@@ -721,12 +709,29 @@ export class BigQueryGenerator extends Generator {
   // BigQuery uses EXCEPT DISTINCT / INTERSECT DISTINCT by default
   protected override setOperation(
     expression: exp.SetOperation,
-    op: string,
+    _op?: string,
   ): string {
-    const left = this.sql(expression.args.this as exp.Expression)
-    const right = this.sql(expression.args.expression as exp.Expression)
-    const distinct = expression.args.distinct !== false ? " DISTINCT" : " ALL"
-    return `${left} ${op}${distinct} ${right}`
+    const sqls: string[] = []
+    const stack: (string | exp.Expression)[] = [expression]
+
+    while (stack.length > 0) {
+      const node = stack.pop()!
+      if (node instanceof exp.SetOperation) {
+        stack.push(node.args.expression as exp.Expression)
+        const distinct = node.args.distinct !== false ? " DISTINCT" : " ALL"
+        const nodeOp = node.key.toUpperCase()
+        stack.push(`${nodeOp}${distinct}`)
+        stack.push(node.args.this as exp.Expression)
+      } else if (typeof node === "string") {
+        sqls.push(node)
+      } else {
+        sqls.push(this.sql(node))
+      }
+    }
+
+    let sql = sqls.join(" ")
+    sql = this.queryModifiers(expression, sql)
+    return this.prependCtes(expression, sql)
   }
 
   protected override bracket_sql(expression: exp.Bracket): string {
@@ -801,7 +806,7 @@ export class BigQueryGenerator extends Generator {
     return `UNNEST(${args})${aliasSql}`
   }
 
-  protected override select_sql(expression: exp.Select): string {
+  override select_sql(expression: exp.Select): string {
     unqualifyUnnest(expression)
     return super.select_sql(expression)
   }
@@ -814,7 +819,7 @@ export class BigQueryGenerator extends Generator {
 
   // BigQuery doesn't have traditional LIMIT OFFSET - uses LIMIT n OFFSET m
   protected override offset_sql(expression: exp.Offset): string {
-    return `OFFSET ${this.sql(expression.args.this as exp.Expression)}`
+    return `OFFSET ${this.sql(expression.args.this)}`
   }
 }
 

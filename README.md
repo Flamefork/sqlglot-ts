@@ -134,12 +134,15 @@ npm run test:examples  # Run all examples
 ```bash
 npm install            # Install dependencies
 npm run build          # Build
-npm test               # format:check + lint + typecheck + examples + compat DuckDB
+npm run verify:fast    # format + lint + typecheck + examples + architecture
+npm run verify:ci      # verify:fast + packaging + codegen freshness + API surface
+npm run verify:full    # verify:ci + full compat
+npm run test:compat:duckdb  # Fast compat subset used for targeted local checks
 npm run test:compat    # Full compat run (all dialects)
-npm run test:packaging # npm pack → temp install → verify exports
+npm run test:packaging # npm pack -> temp install -> verify exports
 npm run fix            # Format + lint fix
 npm run generate       # Generate TS expressions from Python SQLGlot
-npm run release -- 0.2.0  # Bump version, commit, tag, push → CI publishes to npm
+npm run release -- 0.2.0  # verify:ci + bump version + commit + tag + push
 ```
 
 ## Differences from Python SQLGlot

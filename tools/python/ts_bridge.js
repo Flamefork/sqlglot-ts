@@ -5,15 +5,40 @@
  */
 
 import { createInterface } from "node:readline";
-import * as expMod from "../dist/expressions.generated.mjs";
-import "../dist/dialects/index.mjs";
-import {
-	annotateTypes,
-	indexOffsetLogs,
-	parse,
-	parseOne,
-	transpile,
-} from "../dist/index.mjs";
+import * as expMod from "../../dist/expressions.generated.mjs";
+import * as expHelpers from "../../dist/expressions.mjs";
+import "../../dist/dialects/index.mjs";
+
+import { indexOffsetLogs } from "../../dist/expressions.mjs";
+import * as indexMod from "../../dist/index.mjs";
+
+const { annotateTypes, parse, parseOne, transpile } = indexMod;
+
+// Snake_case to camelCase conversion for Python→TS name mapping
+function toCamel(name) {
+	const parts = name.split("_");
+	// Trailing underscore: and_, or_, is_, as_, with_, except_, not_
+	if (parts.length > 1 && parts[parts.length - 1] === "") {
+		const core = parts.slice(0, -1);
+		return (
+			core[0] +
+			core
+				.slice(1)
+				.filter((p) => p.length > 0)
+				.map((p) => p[0].toUpperCase() + p.slice(1))
+				.join("") +
+			"_"
+		);
+	}
+	return (
+		parts[0] +
+		parts
+			.slice(1)
+			.filter((p) => p.length > 0)
+			.map((p) => p[0].toUpperCase() + p.slice(1))
+			.join("")
+	);
+}
 
 // Expression store - holds parsed expressions by ID
 const expressions = new Map();
@@ -114,7 +139,12 @@ rl.on("line", (line) => {
 
 			case "parseOne": {
 				drainLogs();
-				const expr = parseOne(cmd.sql, { dialect: cmd.dialect || "" });
+				const opts = { dialect: cmd.dialect || "" };
+				if (cmd.into) {
+					const intoClass = expMod[cmd.into];
+					if (intoClass) opts.into = intoClass;
+				}
+				const expr = parseOne(cmd.sql, opts);
 				const id = storeExpr(expr);
 				const parseLogs = drainLogs();
 				result = { ok: true, id, key: expr.key };
@@ -171,14 +201,55 @@ rl.on("line", (line) => {
 				break;
 			}
 
+			case "equals": {
+				const expr = getExpr(cmd.id);
+				const other = getExpr(cmd.otherId);
+				if (!expr || !other) {
+					result = { ok: false, error: "Expression not found" };
+				} else {
+					result = { ok: true, value: expr.equals(other) };
+				}
+				break;
+			}
+
+			case "hashCode": {
+				const expr = getExpr(cmd.id);
+				if (!expr) {
+					result = { ok: false, error: "Expression not found" };
+				} else {
+					result = { ok: true, value: expr.hashCode() };
+				}
+				break;
+			}
+
+			case "hasArgType": {
+				const expr = getExpr(cmd.id);
+				if (!expr) {
+					result = { ok: false, error: `Expression ${cmd.id} not found` };
+				} else {
+					const has = cmd.name in expr.constructor.argTypes;
+					result = { ok: true, value: has };
+				}
+				break;
+			}
+
 			case "getattr": {
 				const expr = getExpr(cmd.id);
 				if (!expr) {
 					result = { ok: false, error: `Expression ${cmd.id} not found` };
 				} else {
-					const val = expr[cmd.name];
+					let tsName = toCamel(cmd.name);
+					let val = expr[tsName];
+					// Fallback: try with trailing underscore (JS reserved words like delete → delete_)
+					if (val === undefined && !tsName.endsWith("_")) {
+						const altName = tsName + "_";
+						if (expr[altName] !== undefined) {
+							tsName = altName;
+							val = expr[altName];
+						}
+					}
 					if (typeof val === "function") {
-						result = { ok: true, value: { type: "method", name: cmd.name } };
+						result = { ok: true, value: { type: "method", name: tsName } };
 					} else {
 						result = { ok: true, value: serialize(val) };
 					}
@@ -191,14 +262,31 @@ rl.on("line", (line) => {
 				if (!expr) {
 					result = { ok: false, error: `Expression ${cmd.id} not found` };
 				} else {
-					const method = expr[cmd.name];
+					let tsName = toCamel(cmd.name);
+					let method = expr[tsName];
+					// Fallback: try with trailing underscore (JS reserved words)
+					if (typeof method !== "function" && !tsName.endsWith("_")) {
+						const altName = tsName + "_";
+						if (typeof expr[altName] === "function") {
+							tsName = altName;
+							method = expr[altName];
+						}
+					}
 					if (typeof method !== "function") {
-						result = { ok: false, error: `${cmd.name} is not a method` };
+						result = {
+							ok: false,
+							error: `${cmd.name} (tried '${tsName}') is not a method on ${expr.key}`,
+						};
 					} else {
 						const args = (cmd.args || []).map(deserializeArg);
 						const kwargs = cmd.kwargs ? deserializeArg(cmd.kwargs) : {};
-						if (Object.keys(kwargs).length > 0) {
-							args.push(kwargs);
+						// Convert kwarg keys from snake_case to camelCase
+						const tsKwargs = {};
+						for (const [k, v] of Object.entries(kwargs)) {
+							tsKwargs[toCamel(k)] = v;
+						}
+						if (Object.keys(tsKwargs).length > 0) {
+							args.push(tsKwargs);
 						}
 						const ret = method.apply(expr, args);
 						result = { ok: true, value: serialize(ret) };
@@ -335,6 +423,38 @@ rl.on("line", (line) => {
 					const expr = new ExprClass(args);
 					const id = storeExpr(expr);
 					result = { ok: true, id, key: expr.key };
+				}
+				break;
+			}
+
+			case "callFunction": {
+				const fn = expHelpers[cmd.name] || indexMod[cmd.name];
+				if (typeof fn !== "function") {
+					result = { ok: false, error: `Unknown function: ${cmd.name}` };
+				} else {
+					const args = (cmd.args || []).map(deserializeArg);
+					const kwargs = cmd.kwargs ? deserializeArg(cmd.kwargs) : {};
+					const tsKwargs = {};
+					for (const [k, v] of Object.entries(kwargs)) {
+						tsKwargs[toCamel(k)] = v;
+					}
+					if (Object.keys(tsKwargs).length > 0) {
+						args.push(tsKwargs);
+					}
+					const ret = fn(...args);
+					result = { ok: true, value: serialize(ret) };
+				}
+				break;
+			}
+
+			case "copy": {
+				const expr = getExpr(cmd.id);
+				if (!expr) {
+					result = { ok: false, error: `Expression ${cmd.id} not found` };
+				} else {
+					const copied = expr.copy();
+					const id = storeExpr(copied);
+					result = { ok: true, id, key: copied.key };
 				}
 				break;
 			}

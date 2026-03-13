@@ -6,7 +6,7 @@ import { Dialect } from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
-import { FunctionBuilder, Parser } from "../parser.js"
+import { type FunctionBuilder, Parser } from "../parser.js"
 import { TokenType } from "../tokens.js"
 import {
   dateDeltaSql,
@@ -505,6 +505,7 @@ export class TSQLGenerator extends Generator {
   static override HEX_START: string | null = "0x"
   static override HEX_END: string | null = ""
   protected override ALTER_SET_TYPE = ""
+  protected override JSON_PATH_BRACKETED_KEY_SUPPORTED = false
 
   static override FEATURES: {
     CONCAT_COALESCE: boolean
@@ -610,7 +611,7 @@ export class TSQLGenerator extends Generator {
         const expr = e as exp.TimeStrToTime
         const zone = expr.args.zone
         const dataType = zone ? "DATETIMEOFFSET" : "DATETIME2"
-        const sql = `CAST(${gen.sql(expr.args.this as exp.Expression)} AS ${dataType})`
+        const sql = `CAST(${gen.sql(expr.args.this)} AS ${dataType})`
         if (zone) {
           return gen.sql(
             new exp.AtTimeZone({ this: sql, zone: exp.Literal.string("UTC") }),
@@ -648,7 +649,7 @@ export class TSQLGenerator extends Generator {
           ])
         }
         // FORMAT(this, format[, culture])
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const fmtSql = gen.formatTimeStr(expr)
         return `FORMAT(${thisExpr}, ${fmtSql})`
       },
@@ -715,15 +716,15 @@ export class TSQLGenerator extends Generator {
   }
 
   protected override transaction_sql(expression: exp.Transaction): string {
-    const this_ = this.sql(expression, "this")
+    const this_ = this.sql(expression.args.this)
     const thisSql = this_ ? ` ${this_}` : ""
-    const mark = this.sql(expression, "mark")
+    const mark = this.sql(expression.args.mark)
     const markSql = mark ? ` WITH MARK ${mark}` : ""
     return `BEGIN TRANSACTION${thisSql}${markSql}`
   }
 
   protected override commit_sql(expression: exp.Commit): string {
-    const this_ = this.sql(expression, "this")
+    const this_ = this.sql(expression.args.this)
     const thisSql = this_ ? ` ${this_}` : ""
     const durability = expression.args.durability
     const durabilitySql =
@@ -734,14 +735,14 @@ export class TSQLGenerator extends Generator {
   }
 
   protected override rollback_sql(expression: exp.Rollback): string {
-    const this_ = this.sql(expression, "this")
+    const this_ = this.sql(expression.args.this)
     const thisSql = this_ ? ` ${this_}` : ""
     return `ROLLBACK TRANSACTION${thisSql}`
   }
 
   protected override queryoption_sql(expression: exp.QueryOption): string {
-    const option = this.sql(expression, "this")
-    const value = this.sql(expression, "expression")
+    const option = this.sql(expression.args.this)
+    const value = this.sql(expression.args.expression)
     if (value) {
       const eqSign = OPTIONS_THAT_REQUIRE_EQUAL.has(option) ? "= " : ""
       return `${option} ${eqSign}${value}`
@@ -788,7 +789,7 @@ export class TSQLGenerator extends Generator {
     if (action instanceof exp.AlterRename) {
       const table = action.args.this
       const tableName = table instanceof exp.Table ? table.name : ""
-      return `EXEC sp_rename '${this.sql(expression, "this")}', '${tableName}'`
+      return `EXEC sp_rename '${this.sql(expression.args.this)}', '${tableName}'`
     }
     return super.alter_sql(expression)
   }
@@ -799,7 +800,7 @@ export class TSQLGenerator extends Generator {
       thisExpr instanceof exp.EQ &&
       !(thisExpr.args.this instanceof exp.Parameter)
     ) {
-      return `${this.sql(thisExpr.args.this as exp.Expression)} ${this.sql(thisExpr.args.expression as exp.Expression)}`
+      return `${this.sql(thisExpr.args.this)} ${this.sql(thisExpr.args.expression)}`
     }
     return super.setitem_sql(expression)
   }

@@ -6,7 +6,7 @@ import { Dialect } from "../dialect.js"
 import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
-import { FunctionBuilder, Parser } from "../parser.js"
+import { type FunctionBuilder, Parser } from "../parser.js"
 import { TokenType } from "../tokens.js"
 import {
   datestrtodate_sql,
@@ -176,7 +176,7 @@ export class PostgresGenerator extends Generator {
         const scale = expr.args.scale as exp.Literal | undefined
         const scaleValue =
           scale instanceof exp.Literal ? String(scale.value) : undefined
-        const timestamp = gen.sql(expr.args.this as exp.Expression)
+        const timestamp = gen.sql(expr.args.this)
         if (!scaleValue || scaleValue === "0") {
           return `TO_TIMESTAMP(${timestamp})`
         }
@@ -187,9 +187,7 @@ export class PostgresGenerator extends Generator {
       exp.TimeToStr,
       (gen: Generator, e: exp.Expression) => {
         const fmt = gen.formatTimeStr(e)
-        const thisExpr = gen.sql(
-          (e as exp.TimeToStr).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this)
         return `TO_CHAR(${thisExpr}, ${fmt})`
       },
     ],
@@ -197,9 +195,7 @@ export class PostgresGenerator extends Generator {
       exp.StrToTime,
       (gen: Generator, e: exp.Expression) => {
         const fmt = gen.formatTimeStr(e)
-        const thisExpr = gen.sql(
-          (e as exp.StrToTime).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this)
         return `TO_TIMESTAMP(${thisExpr}, ${fmt})`
       },
     ],
@@ -207,7 +203,7 @@ export class PostgresGenerator extends Generator {
       exp.StructExtract,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.StructExtract
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const field = String(
           (expr.args.expression as exp.Expression).args.this ?? "",
         )
@@ -228,7 +224,7 @@ export class PostgresGenerator extends Generator {
       exp.ArrayConcat,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.ArrayConcat
-        const args: exp.Expression[] = [expr.args.this as exp.Expression]
+        const args = [expr.args.this]
         const exprs = expr.expressions
         if (exprs.length > 0) args.push(...exprs)
         return gen.funcCall("ARRAY_CAT", args)
@@ -241,8 +237,8 @@ export class PostgresGenerator extends Generator {
       exp.GroupConcat,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.GroupConcat
-        const args: exp.Expression[] = [expr.args.this as exp.Expression]
-        const sep = expr.args.separator as exp.Expression | undefined
+        const args = [expr.args.this]
+        const sep = expr.args.separator
         if (sep) args.push(sep)
         return gen.funcCall("STRING_AGG", args)
       },
@@ -251,9 +247,9 @@ export class PostgresGenerator extends Generator {
       exp.DateAdd,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.DateAdd
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const unit = expr.text("unit").toUpperCase() || "DAY"
-        const amount = gen.sql(expr.args.expression as exp.Expression)
+        const amount = gen.sql(expr.args.expression)
         return `${thisExpr} + INTERVAL '${amount}' ${unit}`
       },
     ],
@@ -261,9 +257,9 @@ export class PostgresGenerator extends Generator {
       exp.DateSub,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.DateSub
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const unit = expr.text("unit").toUpperCase() || "DAY"
-        const amount = gen.sql(expr.args.expression as exp.Expression)
+        const amount = gen.sql(expr.args.expression)
         return `${thisExpr} - INTERVAL '${amount}' ${unit}`
       },
     ],
@@ -272,8 +268,8 @@ export class PostgresGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.DateDiff
         const unit = expr.text("unit").toUpperCase() || "DAY"
-        const end = gen.sql(expr.args.this as exp.Expression)
-        const start = gen.sql(expr.args.expression as exp.Expression)
+        const end = gen.sql(expr.args.this)
+        const start = gen.sql(expr.args.expression)
         if (unit === "MONTH")
           return `(EXTRACT(YEAR FROM ${end}) * 12 + EXTRACT(MONTH FROM ${end})) - (EXTRACT(YEAR FROM ${start}) * 12 + EXTRACT(MONTH FROM ${start}))`
         if (unit === "YEAR")
@@ -292,9 +288,9 @@ export class PostgresGenerator extends Generator {
       exp.TsOrDsAdd,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.TsOrDsAdd
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const unit = expr.text("unit").toUpperCase() || "DAY"
-        const amount = gen.sql(expr.args.expression as exp.Expression)
+        const amount = gen.sql(expr.args.expression)
         return `${thisExpr} + INTERVAL '${amount}' ${unit}`
       },
     ],
@@ -303,8 +299,8 @@ export class PostgresGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.TsOrDsDiff
         const unit = expr.text("unit").toUpperCase() || "DAY"
-        const end = gen.sql(expr.args.this as exp.Expression)
-        const start = gen.sql(expr.args.expression as exp.Expression)
+        const end = gen.sql(expr.args.this)
+        const start = gen.sql(expr.args.expression)
         if (unit === "MONTH")
           return `(EXTRACT(YEAR FROM ${end}) * 12 + EXTRACT(MONTH FROM ${end})) - (EXTRACT(YEAR FROM ${start}) * 12 + EXTRACT(MONTH FROM ${start}))`
         if (unit === "YEAR")
@@ -327,8 +323,8 @@ export class PostgresGenerator extends Generator {
       exp.TryCast,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.TryCast
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
-        const to = gen.sql(expr.args.to as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
+        const to = gen.sql(expr.args.to)
         return `CAST(${thisExpr} AS ${to})`
       },
     ],
@@ -336,16 +332,14 @@ export class PostgresGenerator extends Generator {
     [
       exp.TimeToUnix,
       (gen: Generator, e: exp.Expression) => {
-        const thisExpr = gen.sql(
-          (e as exp.TimeToUnix).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this)
         return `DATE_PART('epoch', ${thisExpr})`
       },
     ],
     [
       exp.CountIf,
       (gen: Generator, e: exp.Expression) => {
-        const cond = gen.sql((e as exp.CountIf).args.this as exp.Expression)
+        const cond = gen.sql(e.args.this)
         return `SUM(CASE WHEN ${cond} THEN 1 ELSE 0 END)`
       },
     ],
@@ -353,8 +347,8 @@ export class PostgresGenerator extends Generator {
       exp.ArrayContains,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.ArrayContains
-        const value = gen.sql(expr.args.expression as exp.Expression)
-        const array = gen.sql(expr.args.this as exp.Expression)
+        const value = gen.sql(expr.args.expression)
+        const array = gen.sql(expr.args.this)
         return `CASE WHEN ${value} IS NULL THEN NULL ELSE COALESCE(${value} = ANY(${array}), FALSE) END`
       },
     ],
@@ -366,7 +360,7 @@ export class PostgresGenerator extends Generator {
         const length = String(
           (expr.args.length as exp.Expression | undefined)?.args?.this ?? "256",
         )
-        return gen.funcCall(`SHA${length}`, [expr.args.this as exp.Expression])
+        return gen.funcCall(`SHA${length}`, [expr.args.this])
       },
     ],
     [
@@ -377,11 +371,11 @@ export class PostgresGenerator extends Generator {
         return gen.funcCall(
           "REGEXP_REPLACE",
           [
-            expr.args.this as exp.Expression,
-            expr.args.expression as exp.Expression,
-            expr.args.replacement as exp.Expression | undefined,
-            expr.args.position as exp.Expression | undefined,
-            expr.args.occurrence as exp.Expression | undefined,
+            expr.args.this,
+            expr.args.expression,
+            expr.args.replacement,
+            expr.args.position,
+            expr.args.occurrence,
             modifiers,
           ].filter((x): x is exp.Expression => x != null),
         )
@@ -394,8 +388,8 @@ export class PostgresGenerator extends Generator {
 
   // PostgreSQL uses CAST() for generated output (:: is only for parsing)
   protected override cast_sql(expression: exp.Cast): string {
-    const expr = this.sql(expression.args.this as exp.Expression)
-    const to = this.sql(expression.args.to as exp.Expression)
+    const expr = this.sql(expression.args.this)
+    const to = this.sql(expression.args.to)
     return `CAST(${expr} AS ${to})`
   }
 
@@ -404,7 +398,7 @@ export class PostgresGenerator extends Generator {
     let sql = this.binary_sql(expression, "ILIKE")
     const escapeExpr = expression.args.escape
     if (escapeExpr) {
-      sql += ` ESCAPE ${this.sql(escapeExpr as exp.Expression)}`
+      sql += ` ESCAPE ${this.sql(escapeExpr)}`
     }
     return sql
   }
@@ -460,11 +454,11 @@ export class PostgresGenerator extends Generator {
 
   // PostgreSQL uses SUBSTRING(string FROM start FOR length) syntax
   protected override substring_sql(expression: exp.Substring): string {
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
     const startVal = expression.args.start
-    const start = startVal ? this.sql(startVal as exp.Expression) : ""
+    const start = startVal ? this.sql(startVal) : ""
     const lengthVal = expression.args.length
-    const length = lengthVal ? this.sql(lengthVal as exp.Expression) : ""
+    const length = lengthVal ? this.sql(lengthVal) : ""
 
     const fromPart = start ? ` FROM ${start}` : ""
     const forPart = length ? ` FOR ${length}` : ""
@@ -476,7 +470,7 @@ export class PostgresGenerator extends Generator {
   protected override matchagainst_sql(expression: exp.MatchAgainst): string {
     const expressions = expression.args.expressions as exp.Expression[]
     const left = expressions && expressions[0] ? this.sql(expressions[0]) : ""
-    const right = this.sql(expression.args.this as exp.Expression)
+    const right = this.sql(expression.args.this)
     return `${left} @@ ${right}`
   }
 
@@ -492,12 +486,12 @@ export class PostgresGenerator extends Generator {
 
   protected override ignorenulls_sql(expression: exp.IgnoreNulls): string {
     this.unsupported("PostgreSQL does not support IGNORE NULLS.")
-    return this.sql(expression.args.this as exp.Expression)
+    return this.sql(expression.args.this)
   }
 
   protected override respectnulls_sql(expression: exp.RespectNulls): string {
     this.unsupported("PostgreSQL does not support RESPECT NULLS.")
-    return this.sql(expression.args.this as exp.Expression)
+    return this.sql(expression.args.this)
   }
 }
 

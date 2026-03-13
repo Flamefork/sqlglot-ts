@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "=== Smoke test: npm pack → temp install → import ==="
+REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." >/dev/null && pwd)
+cd "$REPO_ROOT"
+
+echo "=== Runtime smoke test: npm pack -> temp install -> import ==="
 
 PACK_DIR=$(mktemp -d)
 PROJ_DIR=$(mktemp -d)
@@ -51,7 +54,7 @@ const table = ast.find(Table);
 if (table?.name !== 't') throw new Error('expressions import failed');
 
 // builder
-const built = select('a').from('t').sql();
+const built = select('a').from_('t').sql();
 if (built !== 'SELECT a FROM t') throw new Error('builder failed');
 
 // serde
@@ -62,4 +65,4 @@ console.log('All smoke tests passed!');
 SCRIPT
 
 node test.mjs
-echo "=== Smoke test passed ==="
+echo "=== Runtime smoke test passed ==="

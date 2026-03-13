@@ -1,0 +1,58 @@
+{
+  "top_level": {
+    "camel_to_snake_case": "internal utility, not part of public SQL API",
+    "ensure_collection": "internal utility",
+    "ensure_list": "internal utility",
+    "maybe_copy": "internal utility (used internally in TS)",
+    "maybe_parse": "internal utility (used internally in TS)",
+    "seq_get": "internal utility",
+    "subclasses": "metaprogramming utility",
+    "deepcopy": "Python-specific (TS uses structuredClone)",
+    "expand": "requires optimizer.scope (not ported)",
+    "find_tables": "requires traverse_scope from optimizer (not ported)",
+    "normalize_table_name": "requires normalize_identifiers from optimizer (not ported)",
+    "replace_tables": "depends on normalize_table_name (optimizer)",
+    "replace_children": "internal AST utility (TS uses transform)",
+    "replace_tree": "internal AST utility (TS uses transform)"
+  },
+  "Expression": {
+    "error_messages": "validator-specific, not ported",
+    "load": "serialization (available as top-level load)",
+    "same_parent": "internal utility",
+    "update_positions": "source position tracking, not ported",
+    "to_s": "Python-specific repr",
+    "required_args": "covered by static argTypes in TS",
+    "arg_key": "internal utility (TS uses direct property access)",
+    "meta": "TS uses typed args object instead of separate meta dict"
+  },
+  "Query": {
+    "required_args": "covered by static argTypes in TS"
+  },
+  "Select": {
+    "required_args": "covered by static argTypes in TS"
+  },
+  "Insert": {
+    "required_args": "covered by static argTypes in TS"
+  },
+  "Update": {
+    "required_args": "covered by static argTypes in TS"
+  },
+  "Delete": {
+    "required_args": "covered by static argTypes in TS"
+  },
+  "Merge": {
+    "required_args": "covered by static argTypes in TS"
+  },
+  "Join": {
+    "required_args": "covered by static argTypes in TS"
+  },
+  "Union": {
+    "required_args": "covered by static argTypes in TS"
+  },
+  "Case": {
+    "required_args": "covered by static argTypes in TS"
+  },
+  "Condition": {
+    "required_args": "covered by static argTypes in TS"
+  }
+}

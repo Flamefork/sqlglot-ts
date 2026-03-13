@@ -7,7 +7,7 @@ import type { ExpressionClass } from "../expression-base.js"
 import * as exp from "../expressions.js"
 import { Generator } from "../generator.js"
 import { type FunctionBuilder, Parser } from "../parser.js"
-import { TokenType, Tokenizer } from "../tokens.js"
+import { Tokenizer, TokenType } from "../tokens.js"
 import {
   preprocess,
   regexpReplaceGlobalModifier,
@@ -29,7 +29,10 @@ function implicitDatetimeCast(
     if (type === "DATE" && ts.includes(":")) {
       castType = TIMEZONE_PATTERN.test(ts) ? "TIMESTAMPTZ" : "TIMESTAMP"
     }
-    return new exp.Cast({ this: arg, to: new exp.DataType({ this: castType }) })
+    return new exp.Cast({
+      this: arg,
+      to: new exp.DataType({ this: castType }),
+    })
   }
   return arg
 }
@@ -64,7 +67,10 @@ function bitwiseAggSql(funcName: string): Transform {
         if (FLOAT_TYPES.has(typeStr)) {
           arg = new exp.Anonymous({ this: "ROUND", expressions: [arg] })
         }
-        arg = new exp.Cast({ this: arg, to: new exp.DataType({ this: "INT" }) })
+        arg = new exp.Cast({
+          this: arg,
+          to: new exp.DataType({ this: "INT" }),
+        })
       }
     }
     return gen.funcCall(funcName, [arg])
@@ -145,7 +151,7 @@ function ceilFloorSql(gen: Generator, e: exp.Expression): string {
   }
 
   const func = expr.key === "ceil" ? "CEIL" : "FLOOR"
-  return `${func}(${gen.sql(expr.args.this as exp.Expression)})`
+  return `${func}(${gen.sql(expr.args.this)})`
 }
 
 // Days of week to ISO 8601 day-of-week numbers
@@ -232,15 +238,9 @@ function dayNavigationSql(gen: Generator, e: exp.Expression): string {
 function corrSql(gen: Generator, e: exp.Expression): string {
   const expr = e as exp.Corr
   if (!expr.args.null_on_zero_variance) {
-    return gen.funcCall("CORR", [
-      expr.args.this as exp.Expression,
-      expr.args.expression as exp.Expression,
-    ])
+    return gen.funcCall("CORR", [expr.args.this, expr.args.expression])
   }
-  const corrCall = gen.funcCall("CORR", [
-    expr.args.this as exp.Expression,
-    expr.args.expression as exp.Expression,
-  ])
+  const corrCall = gen.funcCall("CORR", [expr.args.this, expr.args.expression])
   return `CASE WHEN ISNAN(${corrCall}) THEN NULL ELSE ${corrCall} END`
 }
 
@@ -248,7 +248,7 @@ function corrSql(gen: Generator, e: exp.Expression): string {
 function groupconcatSql(gen: Generator, e: exp.Expression): string {
   const expression = e as exp.GroupConcat
   let thisExpr = expression.args.this as exp.Expression
-  const separator = expression.args.separator as exp.Expression | undefined
+  const separator = expression.args.separator
   const separatorSql = separator ? gen.sql(separator) : "''"
 
   // Extract order from within the expression
@@ -1178,6 +1178,8 @@ export class DuckDBGenerator extends Generator {
   protected override COPY_HAS_INTO_KEYWORD = false
   protected override SUPPORTS_LIKE_QUANTIFIERS = false
   protected override ARRAY_SIZE_DIM_REQUIRED: boolean | undefined = false
+  protected override JSON_KEY_VALUE_PAIR_SEP = ","
+  protected override JSON_PATH_BRACKETED_KEY_SUPPORTED = false
 
   // Window functions that support IGNORE NULLS / RESPECT NULLS
   static IGNORE_RESPECT_NULLS_WINDOW_FUNCTIONS: ExpressionClass[] = [
@@ -1359,7 +1361,7 @@ export class DuckDBGenerator extends Generator {
         const asc = expr.args.asc
         const isDesc = asc instanceof exp.Boolean && asc.args.this === false
         const name = isDesc ? "ARRAY_REVERSE_SORT" : "ARRAY_SORT"
-        return gen.funcCall(name, [expr.args.this as exp.Expression])
+        return gen.funcCall(name, [expr.args.this])
       },
     ],
     [
@@ -1387,9 +1389,8 @@ export class DuckDBGenerator extends Generator {
       exp.PercentileCont,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.PercentileCont
-        const args = [expr.args.this as exp.Expression]
-        if (expr.args.expression)
-          args.push(expr.args.expression as exp.Expression)
+        const args = [expr.args.this]
+        if (expr.args.expression) args.push(expr.args.expression)
         return gen.funcCall("QUANTILE_CONT", args)
       },
     ],
@@ -1397,9 +1398,8 @@ export class DuckDBGenerator extends Generator {
       exp.PercentileDisc,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.PercentileDisc
-        const args = [expr.args.this as exp.Expression]
-        if (expr.args.expression)
-          args.push(expr.args.expression as exp.Expression)
+        const args = [expr.args.this]
+        if (expr.args.expression) args.push(expr.args.expression)
         return gen.funcCall("QUANTILE_DISC", args)
       },
     ],
@@ -1427,7 +1427,7 @@ export class DuckDBGenerator extends Generator {
         const length = String(
           (expr.args.length as exp.Expression | undefined)?.args?.this ?? "256",
         )
-        return gen.funcCall(`SHA${length}`, [expr.args.this as exp.Expression])
+        return gen.funcCall(`SHA${length}`, [expr.args.this])
       },
     ],
     [exp.Split, renameFunc("STR_SPLIT")],
@@ -1442,12 +1442,12 @@ export class DuckDBGenerator extends Generator {
         if (fmt && (fmt as exp.Literal).is_int) {
           return gen.funcCall("FORMAT", [
             exp.Literal.string(`{:,.${fmt.name}f}`),
-            expr.args.this as exp.Expression,
+            expr.args.this,
           ])
         }
         gen.unsupported("Only integer formats are supported by NumberToStr")
         return gen.funcCall("NUMBER_TO_STR", [
-          expr.args.this as exp.Expression,
+          expr.args.this,
           ...(fmt ? [fmt] : []),
         ])
       },
@@ -1466,10 +1466,7 @@ export class DuckDBGenerator extends Generator {
       exp.BitwiseXor,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.BitwiseXor
-        return gen.funcCall("XOR", [
-          expr.args.this as exp.Expression,
-          expr.args.expression as exp.Expression,
-        ])
+        return gen.funcCall("XOR", [expr.args.this, expr.args.expression])
       },
     ],
 
@@ -1676,14 +1673,14 @@ export class DuckDBGenerator extends Generator {
       exp.LogicalOr,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.LogicalOr
-        return `BOOL_OR(CAST(${gen.sql(expr.args.this as exp.Expression)} AS BOOLEAN))`
+        return `BOOL_OR(CAST(${gen.sql(expr.args.this)} AS BOOLEAN))`
       },
     ],
     [
       exp.LogicalAnd,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.LogicalAnd
-        return `BOOL_AND(CAST(${gen.sql(expr.args.this as exp.Expression)} AS BOOLEAN))`
+        return `BOOL_AND(CAST(${gen.sql(expr.args.this)} AS BOOLEAN))`
       },
     ],
     [exp.CommentColumnConstraint, () => ""],
@@ -1691,15 +1688,15 @@ export class DuckDBGenerator extends Generator {
       exp.ByteLength,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.ByteLength
-        return `OCTET_LENGTH(${gen.sql(expr.args.this as exp.Expression)})`
+        return `OCTET_LENGTH(${gen.sql(expr.args.this)})`
       },
     ],
     [
       exp.RegexpILike,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.RegexpILike
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
-        const pattern = gen.sql(expr.args.expression as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
+        const pattern = gen.sql(expr.args.expression)
         return `REGEXP_MATCHES(${thisExpr}, ${pattern}, 'i')`
       },
     ],
@@ -1707,7 +1704,7 @@ export class DuckDBGenerator extends Generator {
       exp.ArrayUniqueAgg,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.ArrayUniqueAgg
-        return `LIST(DISTINCT ${gen.sql(expr.args.this as exp.Expression)})`
+        return `LIST(DISTINCT ${gen.sql(expr.args.this)})`
       },
     ],
     [
@@ -1721,7 +1718,7 @@ export class DuckDBGenerator extends Generator {
         ) {
           gen.unsupported(`Expected utf-8 character set, got ${charset.name}.`)
         }
-        return `ENCODE(${gen.sql(expr.args.this as exp.Expression)})`
+        return `ENCODE(${gen.sql(expr.args.this)})`
       },
     ],
     [
@@ -1735,15 +1732,15 @@ export class DuckDBGenerator extends Generator {
         ) {
           gen.unsupported(`Expected utf-8 character set, got ${charset.name}.`)
         }
-        return `DECODE(${gen.sql(expr.args.this as exp.Expression)})`
+        return `DECODE(${gen.sql(expr.args.this)})`
       },
     ],
     [
       exp.StrPosition,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.StrPosition
-        const substr = gen.sql(expr.args.this as exp.Expression)
-        const str = gen.sql(expr.args.substr as exp.Expression)
+        const substr = gen.sql(expr.args.this)
+        const str = gen.sql(expr.args.substr)
         return `STRPOS(${str}, ${substr})`
       },
     ],
@@ -1777,7 +1774,7 @@ export class DuckDBGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.DateTrunc
         const unit = extractUnit(expr)
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         return `DATE_TRUNC('${unit}', ${thisExpr})`
       },
     ],
@@ -1786,7 +1783,7 @@ export class DuckDBGenerator extends Generator {
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.TimestampTrunc
         const unit = extractUnit(expr)
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         return `DATE_TRUNC('${unit}', ${thisExpr})`
       },
     ],
@@ -1794,7 +1791,7 @@ export class DuckDBGenerator extends Generator {
       exp.TimeToStr,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.TimeToStr
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const format = gen.formatTimeStr(e)
         return `STRFTIME(${thisExpr}, ${format})`
       },
@@ -1803,8 +1800,8 @@ export class DuckDBGenerator extends Generator {
       exp.StrToTime,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.StrToTime
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
-        const format = gen.sql(expr.args.format as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
+        const format = gen.sql(expr.args.format)
         const safe = expr.args.safe
         if (safe) {
           return `CAST(TRY_STRPTIME(${thisExpr}, ${format}) AS TIMESTAMP)`
@@ -1816,17 +1813,15 @@ export class DuckDBGenerator extends Generator {
       exp.StrToUnix,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.StrToUnix
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
-        const format = gen.sql(expr.args.format as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
+        const format = gen.sql(expr.args.format)
         return `EPOCH(STRPTIME(${thisExpr}, ${format}))`
       },
     ],
     [
       exp.UnixToStr,
       (gen: Generator, e: exp.Expression) => {
-        const thisExpr = gen.sql(
-          (e as exp.UnixToStr).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this)
         const format = gen.formatTimeStr(e)
         return `STRFTIME(TO_TIMESTAMP(${thisExpr}), ${format})`
       },
@@ -1835,7 +1830,7 @@ export class DuckDBGenerator extends Generator {
       exp.TimeStrToTime,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.TimeStrToTime
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const zone = expr.args.zone
         const dataType = zone ? "TIMESTAMPTZ" : "TIMESTAMP"
         return `CAST(${thisExpr} AS ${dataType})`
@@ -1844,9 +1839,7 @@ export class DuckDBGenerator extends Generator {
     [
       exp.TimeStrToDate,
       (gen: Generator, e: exp.Expression) => {
-        const thisExpr = gen.sql(
-          (e as exp.TimeStrToDate).args.this as exp.Expression,
-        )
+        const thisExpr = gen.sql(e.args.this)
         return `CAST(${thisExpr} AS DATE)`
       },
     ],
@@ -1963,9 +1956,9 @@ export class DuckDBGenerator extends Generator {
         return gen.funcCall(
           "REGEXP_REPLACE",
           [
-            expr.args.this as exp.Expression,
-            expr.args.expression as exp.Expression,
-            expr.args.replacement as exp.Expression | undefined,
+            expr.args.this,
+            expr.args.expression,
+            expr.args.replacement,
             regexpReplaceGlobalModifier(expr),
           ].filter((x): x is exp.Expression => x != null),
         )
@@ -2013,16 +2006,16 @@ export class DuckDBGenerator extends Generator {
       const name =
         func instanceof exp.PercentileCont ? "QUANTILE_CONT" : "QUANTILE_DISC"
       const orderCol = expression.find(exp.Ordered)
-      const orderExpr = expression.args.expression as exp.Expression | undefined
+      const orderExpr = expression.args.expression
       const orderSql = orderExpr ? ` ${this.sql(orderExpr)}` : ""
 
       if (orderCol) {
-        const colSql = this.sql(orderCol.args.this as exp.Expression)
-        const fracSql = this.sql(func.args.this as exp.Expression)
+        const colSql = this.sql(orderCol.args.this)
+        const fracSql = this.sql(func.args.this)
         return `${name}(${colSql}, ${fracSql}${orderSql})`
       }
 
-      const fracSql = this.sql(func.args.this as exp.Expression)
+      const fracSql = this.sql(func.args.this)
       return `${name}(${fracSql}${orderSql})`
     }
 
@@ -2063,7 +2056,7 @@ export class DuckDBGenerator extends Generator {
 
   protected override columndef_sql(expression: exp.ColumnDef): string {
     if (expression.parent instanceof exp.UserDefinedFunction) {
-      return this.sql(expression, "this")
+      return this.sql(expression.args.this)
     }
     return super.columndef_sql(expression)
   }
@@ -2071,7 +2064,7 @@ export class DuckDBGenerator extends Generator {
   // DuckDB-specific date part mappings for EXTRACT
   protected override extract_sql(expression: exp.Extract): string {
     const part = expression.text("this").toUpperCase()
-    const expr = this.sql(expression.args.expression as exp.Expression)
+    const expr = this.sql(expression.args.expression)
 
     const partMappings: Record<string, string> = {
       DAYOFWEEKISO: "ISODOW",
@@ -2108,7 +2101,7 @@ export class DuckDBGenerator extends Generator {
     let sql = this.binary_sql(expression, "ILIKE")
     const escapeExpr = expression.args.escape
     if (escapeExpr) {
-      sql += ` ESCAPE ${this.sql(escapeExpr as exp.Expression)}`
+      sql += ` ESCAPE ${this.sql(escapeExpr)}`
     }
     return sql
   }
@@ -2132,31 +2125,28 @@ export class DuckDBGenerator extends Generator {
     const subquery = expression.args.this
     if (subquery instanceof exp.Subquery) {
       const inner = subquery.args.this
-      return `ARRAY(${this.sql(inner as exp.Expression)})`
+      return `ARRAY(${this.sql(inner)})`
     }
 
     // For array literals, use [...] without ARRAY keyword
     return `[${this.expressions(exprs)}]`
   }
 
-  protected override hexstring_sql(expression: exp.HexString): string {
+  override hexstring_sql(expression: exp.HexString): string {
     return super.hexstring_sql(expression, "UNHEX")
   }
 
   // DuckDB uses ~ for regex like (same as Postgres)
   protected override regexplike_sql(expression: exp.RegexpLike): string {
-    const args: exp.Expression[] = [
-      expression.args.this as exp.Expression,
-      expression.args.expression as exp.Expression,
-    ]
-    if (expression.args.flag) args.push(expression.args.flag as exp.Expression)
+    const args = [expression.args.this, expression.args.expression]
+    if (expression.args.flag) args.push(expression.args.flag)
     return this.funcCall("REGEXP_MATCHES", args)
   }
 
   protected override regexpilike_sql(expression: exp.RegexpILike): string {
     return this.funcCall("REGEXP_MATCHES", [
-      expression.args.this as exp.Expression,
-      expression.args.expression as exp.Expression,
+      expression.args.this,
+      expression.args.expression,
       exp.Literal.string("i"),
     ])
   }
@@ -2197,11 +2187,9 @@ export class DuckDBGenerator extends Generator {
   protected generateseries_sql(expression: exp.GenerateSeries): string {
     if (expression.args.is_end_exclusive) {
       return this.funcCall("RANGE", [
-        expression.args.start as exp.Expression,
-        expression.args.end as exp.Expression,
-        ...(expression.args.step
-          ? [expression.args.step as exp.Expression]
-          : []),
+        expression.args.start,
+        expression.args.end,
+        ...(expression.args.step ? [expression.args.step] : []),
       ])
     }
     return this.function_fallback_sql(expression)
@@ -2223,22 +2211,22 @@ export class DuckDBGenerator extends Generator {
 
   protected getbit_sql(expression: exp.Getbit): string {
     return this.funcCall("GET_BIT", [
-      expression.args.this as exp.Expression,
-      expression.args.expression as exp.Expression,
+      expression.args.this,
+      expression.args.expression,
     ])
   }
 
   protected levenshtein_sql(expression: exp.Levenshtein): string {
     return this.funcCall("LEVENSHTEIN", [
-      expression.args.this as exp.Expression,
-      expression.args.expression as exp.Expression,
+      expression.args.this,
+      expression.args.expression,
     ])
   }
 
   protected regexpextract_sql(expression: exp.RegexpExtract): string {
     let thisExpr = expression.args.this as exp.Expression
     let group = expression.args.group as exp.Expression | undefined
-    const params = expression.args.parameters as exp.Expression | undefined
+    const params = expression.args.parameters
     const position = expression.args.position as exp.Expression | undefined
     const occurrence = expression.args.occurrence as exp.Expression | undefined
 
@@ -2269,12 +2257,12 @@ export class DuckDBGenerator extends Generator {
         ...(group ? [group] : []),
         ...(params ? [params] : []),
       ])
-      return `ARRAY_EXTRACT(${extractAllSql}, ${this.sql(occurrence as exp.Expression)})`
+      return `ARRAY_EXTRACT(${extractAllSql}, ${this.sql(occurrence)})`
     }
 
     return this.funcCall("REGEXP_EXTRACT", [
       thisExpr,
-      expression.args.expression as exp.Expression,
+      expression.args.expression,
       ...(group ? [group] : []),
       ...(params ? [params] : []),
     ])
@@ -2282,7 +2270,7 @@ export class DuckDBGenerator extends Generator {
 
   protected approxquantile_sql(expression: exp.ApproxQuantile): string {
     const thisExpr = expression.args.this as exp.Expression
-    const quantile = expression.args.quantile as exp.Expression
+    const quantile = expression.args.quantile
 
     if (thisExpr instanceof exp.Distinct) {
       const innerExpr = thisExpr.expressions[0] as exp.Expression
@@ -2308,7 +2296,9 @@ export class DuckDBGenerator extends Generator {
       }
       numQuantilesExpr = exprs[1]
       // Keep Distinct wrapping only the first expression
-      thisExpr = new exp.Distinct({ expressions: [exprs[0] as exp.Expression] })
+      thisExpr = new exp.Distinct({
+        expressions: [exprs[0] as exp.Expression],
+      })
     } else {
       numQuantilesExpr = expression.args.expression as
         | exp.Expression
@@ -2392,38 +2382,36 @@ export class DuckDBGenerator extends Generator {
     const formattedTime = this.formatTimeStr(expression)
     const safe = expression.args.safe
     const funcName = safe ? "TRY_STRPTIME" : "STRPTIME"
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
     return `CAST(${funcName}(${thisExpr}, ${formattedTime}) AS DATE)`
   }
 
   protected datefromparts_sql(expression: exp.DateFromParts): string {
-    const year = expression.args.year as exp.Expression
-    const month = expression.args.month as exp.Expression
-    const day = expression.args.day as exp.Expression
-    return this.funcCall("MAKE_DATE", [year, month, day])
+    return this.funcCall("MAKE_DATE", [
+      expression.args.year,
+      expression.args.month,
+      expression.args.day,
+    ])
   }
 
   // DuckDB UnixToTime: MILLIS → EPOCH_MS, MICROS → MAKE_TIMESTAMP, SECONDS → TO_TIMESTAMP
   protected unixtotime_sql(expression: exp.UnixToTime): string {
     const scale = expression.args.scale as exp.Literal | undefined
-    const timestamp = expression.args.this as exp.Expression
-
-    // Scale is a Literal: 3=MILLIS, 6=MICROS, 0=SECONDS (or undefined)
     const scaleValue =
       scale instanceof exp.Literal ? String(scale.value) : undefined
 
     if (scaleValue === "3") {
-      return this.funcCall("EPOCH_MS", [timestamp])
+      return this.funcCall("EPOCH_MS", [expression.args.this])
     }
     if (scaleValue === "6") {
-      return this.funcCall("MAKE_TIMESTAMP", [timestamp])
+      return this.funcCall("MAKE_TIMESTAMP", [expression.args.this])
     }
     // Default: seconds (scale=0 or undefined)
-    return this.funcCall("TO_TIMESTAMP", [timestamp])
+    return this.funcCall("TO_TIMESTAMP", [expression.args.this])
   }
 
   protected attach_sql(expression: exp.Attach): string {
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
     const existsSql = expression.args.exists ? " IF NOT EXISTS" : ""
     const exprs = expression.expressions
     const exprsSql = exprs.length > 0 ? ` (${this.expressions(exprs)})` : ""
@@ -2431,15 +2419,15 @@ export class DuckDBGenerator extends Generator {
   }
 
   protected detach_sql(expression: exp.Detach): string {
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
     const existsSql = expression.args.exists ? " DATABASE IF EXISTS" : ""
     return `DETACH${existsSql} ${thisExpr}`
   }
 
   protected attachoption_sql(expression: exp.AttachOption): string {
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
     const value = expression.args.expression
-      ? ` ${this.sql(expression.args.expression as exp.Expression)}`
+      ? ` ${this.sql(expression.args.expression)}`
       : ""
     return `${thisExpr}${value}`
   }
@@ -2486,7 +2474,7 @@ export class DuckDBGenerator extends Generator {
     const pathSql = this.normalizeJsonPath(
       expression.args.expression as exp.Expression,
     )
-    const arrowSql = `${this.sql(expression.args.this as exp.Expression)} ${op} ${pathSql}`
+    const arrowSql = `${this.sql(expression.args.this)} ${op} ${pathSql}`
     const parent = expression.parent
     if (
       parent &&
@@ -2508,8 +2496,8 @@ export class DuckDBGenerator extends Generator {
   protected jsonextractscalar_sql(expression: exp.JSONExtractScalar): string {
     if (expression.args.scalar_only) {
       const innerSql = this.funcCall("JSON_VALUE", [
-        expression.args.this as exp.Expression,
-        expression.args.expression as exp.Expression,
+        expression.args.this,
+        expression.args.expression,
       ])
       return `${innerSql} ->> '$'`
     }
@@ -2543,7 +2531,7 @@ export class DuckDBGenerator extends Generator {
     }
 
     const direction = expression.args.unpivot ? "UNPIVOT" : "PIVOT"
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
     const exprs = this.expressions(expression.expressions)
 
     if (!exprs) {
@@ -2552,14 +2540,14 @@ export class DuckDBGenerator extends Generator {
 
     const on = ` ON ${exprs}`
     const into = expression.args.into
-      ? ` INTO ${this.sql(expression.args.into as exp.Expression)}`
+      ? ` INTO ${this.sql(expression.args.into)}`
       : ""
     const usingExprs = expression.args.using as exp.Expression[] | undefined
     const using = usingExprs?.length
       ? ` USING ${this.expressions(usingExprs)}`
       : ""
     const group = expression.args.group
-      ? ` ${this.sql(expression.args.group as exp.Expression)}`
+      ? ` ${this.sql(expression.args.group)}`
       : ""
 
     return this.prependCtes(
@@ -2569,7 +2557,7 @@ export class DuckDBGenerator extends Generator {
   }
 
   protected unpivotcolumns_sql(expression: exp.UnpivotColumns): string {
-    const name = this.sql(expression.args.this as exp.Expression)
+    const name = this.sql(expression.args.this)
     const values = this.expressions(expression.expressions)
     return `NAME ${name} VALUE ${values}`
   }
@@ -2582,11 +2570,9 @@ export class DuckDBGenerator extends Generator {
   // DuckDB INSTALL statement: FORCE INSTALL name FROM repo
   protected install_sql(expression: exp.Install): string {
     const force = expression.args.force ? "FORCE " : ""
-    const thisExpr = this.sql(expression.args.this as exp.Expression)
+    const thisExpr = this.sql(expression.args.this)
     const fromExpr = expression.args.from_
-    const fromClause = fromExpr
-      ? ` FROM ${this.sql(fromExpr as exp.Expression)}`
-      : ""
+    const fromClause = fromExpr ? ` FROM ${this.sql(fromExpr)}` : ""
     return `${force}INSTALL ${thisExpr}${fromClause}`
   }
 
@@ -2666,7 +2652,7 @@ export class DuckDBGenerator extends Generator {
       "APPROX_TOP_K",
       expression.expressions.length > 0
         ? expression.expressions
-        : [expression.args.this as exp.Expression],
+        : [expression.args.this],
     )
   }
 

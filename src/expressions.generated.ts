@@ -4,36 +4,11 @@
  * Run: npm run generate
  */
 
-import { Expression, type ExpressionClass, maybeParse, _applyBuilder, _applyListBuilder, _applyChildListBuilder, _applyConjunctionBuilder } from './expression-base.js';
-
-function camelToSnakeCase(s: string): string {
-  return s.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase();
-}
+import { Expression, type Args, type ExpressionClass, camelToSnakeCase, maybeParse, _applyBuilder, _applyListBuilder, _applyChildListBuilder, _applyConjunctionBuilder, type BuilderOptions, _extractBuilderArgs } from './expression-base.js';
 
 export class Condition extends Expression {
   get key(): string { return 'condition'; }
   static readonly className: string = 'Condition';
-  and_(...expressions: (string | Expression)[]): Expression {
-    const parsed = expressions.map(e => typeof e === 'string' ? Expression.parseImpl(e) : e);
-    let result: Expression = this;
-    for (const expr of parsed) { result = new And({ this: result, expression: expr }); }
-    return result;
-  }
-  or_(...expressions: (string | Expression)[]): Expression {
-    const parsed = expressions.map(e => typeof e === 'string' ? Expression.parseImpl(e) : e);
-    let result: Expression = this;
-    for (const expr of parsed) { result = new Or({ this: result, expression: expr }); }
-    return result;
-  }
-  not_(): Not { return new Not({ this: this }); }
-  eq(other: unknown): EQ { return this._binop(EQ, other) as EQ; }
-  neq(other: unknown): NEQ { return this._binop(NEQ, other) as NEQ; }
-  is_(other: unknown): Is { return this._binop(Is, other) as Is; }
-  like(other: unknown): Like { return this._binop(Like, other) as Like; }
-  ilike(other: unknown): ILike { return this._binop(ILike, other) as ILike; }
-  rlike(other: unknown): RegexpLike { return this._binop(RegexpLike, other) as RegexpLike; }
-  asc(nullsFirst = true): Ordered { return new Ordered({ this: this, nulls_first: nullsFirst }); }
-  desc(nullsFirst = false): Ordered { return new Ordered({ this: this, desc: true, nulls_first: nullsFirst }); }
 }
 
 export class Predicate extends Condition {
@@ -49,47 +24,68 @@ export class DerivedTable extends Expression {
 export class Query extends Expression {
   get key(): string { return 'query'; }
   static readonly className: string = 'Query';
+  limit(expression: string | Expression | number, options?: BuilderOptions): this {
+    const expr = typeof expression === 'number' ? `${expression}` : expression;
+    return _applyBuilder(expr, this, 'limit', { copy: options?.copy ?? true, into: Limit, prefix: 'LIMIT', dialect: options?.dialect }) as this;
+  }
+  offset(expression: string | Expression | number, options?: BuilderOptions): this {
+    const expr = typeof expression === 'number' ? `${expression}` : expression;
+    return _applyBuilder(expr, this, 'offset', { copy: options?.copy ?? true, into: Offset, prefix: 'OFFSET', dialect: options?.dialect }) as this;
+  }
+  orderBy(...args: (string | Expression | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    return _applyChildListBuilder(expressions, this, 'order', { copy: options.copy ?? true, append: options.append ?? true, into: Order, prefix: 'ORDER BY', dialect: options.dialect }) as this;
+  }
+  where(...args: (string | Expression | null | undefined | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    return _applyConjunctionBuilder(expressions, this, 'where', { copy: options.copy ?? true, into: Where, append: options.append ?? true, dialect: options.dialect }) as this;
+  }
+  get ctes(): Expression[] {
+    const with_ = this.args.with_;
+    return with_ instanceof Expression ? with_.expressions : [];
+  }
+  get selects(): Expression[] {
+    throw new Error("Query objects must implement `selects`");
+  }
+  get namedSelects(): string[] {
+    throw new Error("Query objects must implement `namedSelects`");
+  }
+  select(...args: (string | Expression | BuilderOptions)[]): this {
+    void args;
+    throw new Error("Query objects must implement `select`");
+  }
   subquery(alias?: string): Subquery {
-    const sub = new Subquery({ this: this });
-    if (alias) { sub.set('alias', new TableAlias({ this: new Identifier({ this: alias }) })); }
-    return sub;
+    const subquery = new Subquery({ this: this });
+    if (alias) {
+      subquery.set("alias", new TableAlias({ this: new Identifier({ this: alias }) }));
+    }
+    return subquery;
   }
-  limit(expression: string | Expression, options?: { copy?: boolean; dialect?: string }): this {
-    return _applyBuilder(expression, this, 'limit', { copy: options?.copy ?? true, into: Limit, prefix: 'LIMIT', dialect: options?.dialect }) as this;
+  with_(
+    alias: string | Expression,
+    as_: string | Expression,
+    options?: {
+      recursive?: boolean;
+      materialized?: boolean;
+      append?: boolean;
+      copy?: boolean;
+      dialect?: string;
+      scalar?: boolean;
+    },
+  ): this {
+    return applyCteBuilder(alias, as_, this, options);
   }
-  offset(expression: string | Expression, options?: { copy?: boolean; dialect?: string }): this {
-    return _applyBuilder(expression, this, 'offset', { copy: options?.copy ?? true, into: Offset, prefix: 'OFFSET', dialect: options?.dialect }) as this;
+  union(...args: (string | Expression | { distinct?: boolean })[]): Union {
+    const { expressions, distinct } = extractSetOperationArgs(args);
+    return applySetOperation([this, ...expressions], Union, { distinct }) as Union;
   }
-  orderBy(...expressions: (string | Expression)[]): this {
-    return _applyChildListBuilder(expressions, this, 'order', { copy: true, into: Order, prefix: 'ORDER BY' }) as this;
+  intersect(...args: (string | Expression | { distinct?: boolean })[]): Intersect {
+    const { expressions, distinct } = extractSetOperationArgs(args);
+    return applySetOperation([this, ...expressions], Intersect, { distinct }) as Intersect;
   }
-  where(...expressions: (string | Expression)[]): this {
-    return _applyConjunctionBuilder(expressions, this, 'where', { copy: true, into: Where, append: true }) as this;
-  }
-  with_(alias: string | Expression, as_: string | Expression, options?: { recursive?: boolean; materialized?: boolean; append?: boolean; copy?: boolean; dialect?: string; scalar?: boolean }): this {
-    const aliasExpr = maybeParse(alias, { dialect: options?.dialect, into: TableAlias });
-    let asExpr = maybeParse(as_, { dialect: options?.dialect, copy: options?.copy });
-    if (options?.scalar && !(asExpr instanceof Subquery)) { asExpr = new Subquery({ this: asExpr }); }
-    const cte = new CTE({ this: asExpr, alias: aliasExpr, materialized: options?.materialized, scalar: options?.scalar });
-    return _applyChildListBuilder([cte], this, 'with_', { append: options?.append ?? true, copy: options?.copy ?? true, into: With, properties: options?.recursive ? { recursive: options.recursive } : {} }) as this;
-  }
-  union(...expressions: (string | Expression)[]): Union {
-    const parsed = expressions.map(e => maybeParse(e));
-    let result: Expression = this as Expression;
-    for (const expr of parsed) { result = new Union({ this: result, expression: expr, distinct: true }); }
-    return result as Union;
-  }
-  intersect(...expressions: (string | Expression)[]): Intersect {
-    const parsed = expressions.map(e => maybeParse(e));
-    let result: Expression = this as Expression;
-    for (const expr of parsed) { result = new Intersect({ this: result, expression: expr, distinct: true }); }
-    return result as Intersect;
-  }
-  except_(...expressions: (string | Expression)[]): Except {
-    const parsed = expressions.map(e => maybeParse(e));
-    let result: Expression = this as Expression;
-    for (const expr of parsed) { result = new Except({ this: result, expression: expr, distinct: true }); }
-    return result as Except;
+  except_(...args: (string | Expression | { distinct?: boolean })[]): Except {
+    const { expressions, distinct } = extractSetOperationArgs(args);
+    return applySetOperation([this, ...expressions], Except, { distinct }) as Except;
   }
 }
 
@@ -130,6 +126,10 @@ export class LockingStatement extends Expression {
 export class DML extends Expression {
   get key(): string { return 'dml'; }
   static readonly className: string = 'DML';
+  returning(expression: string | Expression | number, options?: BuilderOptions): this {
+    const expr = typeof expression === 'number' ? `${expression}` : expression;
+    return _applyBuilder(expr, this, 'returning', { copy: options?.copy ?? true, into: Returning, prefix: 'RETURNING', dialect: options?.dialect }) as this;
+  }
 }
 
 export class Create extends DDL {
@@ -261,6 +261,7 @@ export class With extends Expression {
   static readonly argTypes: Record<string, boolean> = { 'expressions': true, 'recursive': false, 'search': false };
   get key(): string { return 'with'; }
   static readonly className: string = 'With';
+  get recursive(): boolean { return !!this.args['recursive']; }
 }
 
 export class WithinGroup extends Expression {
@@ -319,11 +320,13 @@ export class Column extends Condition {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'table': false, 'db': false, 'catalog': false, 'join_mark': false };
   override get key(): string { return 'column'; }
   static readonly className: string = 'Column';
-  get name(): string { return this.text('this'); }
   get table(): string { return this.text('table'); }
   get db(): string { return this.text('db'); }
   get catalog(): string { return this.text('catalog'); }
-  override get isStar(): boolean { const thisVal = this.args.this; return thisVal instanceof Expression && thisVal.key === 'star'; }
+  override get isStar(): boolean {
+    const thisValue = this.args.this;
+    return thisValue instanceof Expression && thisValue.key === "star";
+  }
 }
 
 export class Pseudocolumn extends Column {
@@ -629,6 +632,20 @@ export class Delete extends DML {
   static readonly argTypes: Record<string, boolean> = { 'with_': false, 'this': false, 'using': false, 'where': false, 'returning': false, 'order': false, 'limit': false, 'tables': false, 'cluster': false };
   override get key(): string { return 'delete'; }
   static readonly className: string = 'Delete';
+  where(...args: (string | Expression | null | undefined | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    return _applyConjunctionBuilder(expressions, this, 'where', { copy: options.copy ?? true, into: Where, append: options.append ?? true, dialect: options.dialect }) as this;
+  }
+  delete_(
+    table: string | Expression,
+    options?: { copy?: boolean; dialect?: string },
+  ): this {
+    return _applyBuilder(table, this, "this", {
+      copy: options?.copy ?? true,
+      into: Table,
+      dialect: options?.dialect,
+    }) as this;
+  }
 }
 
 export class Drop extends Expression {
@@ -750,7 +767,6 @@ export class Identifier extends Expression {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'quoted': false, 'global_': false, 'temporary': false };
   get key(): string { return 'identifier'; }
   static readonly className: string = 'Identifier';
-  get name(): string { return this.text('this'); }
   get quoted(): boolean { return !!this.args['quoted']; }
 }
 
@@ -777,6 +793,30 @@ export class Insert extends DDL {
   static readonly argTypes: Record<string, boolean> = { 'hint': false, 'with_': false, 'is_function': false, 'this': false, 'expression': false, 'conflict': false, 'returning': false, 'overwrite': false, 'exists': false, 'alternative': false, 'where': false, 'ignore': false, 'by_name': false, 'stored': false, 'partition': false, 'settings': false, 'source': false, 'default': false };
   override get key(): string { return 'insert'; }
   static readonly className: string = 'Insert';
+  returning(
+    expression: string | Expression,
+    options?: { copy?: boolean; dialect?: string },
+  ): this {
+    return _applyBuilder(expression, this, "returning", {
+      copy: options?.copy ?? true,
+      into: Returning,
+      prefix: "RETURNING",
+      dialect: options?.dialect,
+    }) as this;
+  }
+  with_(
+    alias: string | Expression,
+    as_: string | Expression,
+    options?: {
+      recursive?: boolean;
+      materialized?: boolean;
+      append?: boolean;
+      copy?: boolean;
+      dialect?: string;
+    },
+  ): this {
+    return applyCteBuilder(alias, as_, this, options);
+  }
 }
 
 export class ConditionalInsert extends Expression {
@@ -907,22 +947,69 @@ export class Literal extends Condition {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'is_string': true };
   override get key(): string { return 'literal'; }
   static readonly className: string = 'Literal';
-  get isString(): boolean { return !!this.args['is_string']; }
-  get isNumber(): boolean { return !this.isString; }
-  get value(): string | number {
-    const val = this.args['this'];
-    if (typeof val === 'string') { return this.isNumber ? parseFloat(val) : val; }
-    if (typeof val === 'number') { return val; }
-    return '';
+  get isString(): boolean {
+    return !!this.args.is_string;
   }
-  static string(val: string): Literal { return new Literal({ this: val, is_string: true }); }
-  static number(val: number | string): Literal { return new Literal({ this: `${val}`, is_string: false }); }
+  get isNumber(): boolean {
+    return !this.args.is_string;
+  }
+  get value(): string | number {
+    const value = this.args.this;
+    if (typeof value === "string") {
+      return this.args.is_string ? value : Number.parseFloat(value);
+    }
+    if (typeof value === "number") {
+      return value;
+    }
+    return "";
+  }
+  static string(value: string): Literal {
+    return new Literal({ this: value, is_string: true });
+  }
+  static number(value: number | string): Literal {
+    return new Literal({ this: `${value}`, is_string: false });
+  }
 }
 
 export class Join extends Expression {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'on': false, 'side': false, 'kind': false, 'using': false, 'method': false, 'global_': false, 'hint': false, 'match_condition': false, 'directed': false, 'expressions': false, 'pivots': false };
   get key(): string { return 'join'; }
   static readonly className: string = 'Join';
+  get method(): string { return this.text('method').toUpperCase(); }
+  get kind(): string { return this.text('kind').toUpperCase(); }
+  get side(): string { return this.text('side').toUpperCase(); }
+  get hint(): string { return this.text('hint').toUpperCase(); }
+  get aliasOrName(): string {
+    const thisExpression = this.args.this;
+    return thisExpression instanceof Expression ? thisExpression.aliasOrName : "";
+  }
+  get isSemiOrAntiJoin(): boolean {
+    return this.kind === "SEMI" || this.kind === "ANTI";
+  }
+  on(...expressions: (string | Expression | null | undefined)[]): this {
+    const join = _applyConjunctionBuilder(expressions, this, "on", {
+      append: true,
+      copy: true,
+    }) as this;
+    if (join.text("kind") === "CROSS") {
+      join.set("kind", undefined);
+    }
+    return join;
+  }
+  using(...expressions: (string | Expression | null | undefined)[]): this {
+    const filtered = expressions.filter(
+      (expression): expression is string | Expression =>
+        expression !== null && expression !== undefined,
+    );
+    const join = _applyListBuilder(filtered, this, "using", {
+      append: true,
+      copy: true,
+    }) as this;
+    if (join.text("kind") === "CROSS") {
+      join.set("kind", undefined);
+    }
+    return join;
+  }
 }
 
 export class Lateral extends UDTF {
@@ -991,11 +1078,6 @@ export class Ordered extends Expression {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'desc': false, 'nulls_first': true, 'with_fill': false };
   get key(): string { return 'ordered'; }
   static readonly className: string = 'Ordered';
-  get desc(): boolean { return !!this.args['desc']; }
-  get nullsFirst(): boolean | undefined {
-    const val = this.args['nulls_first'];
-    return typeof val === 'boolean' ? val : undefined;
-  }
 }
 
 export class Property extends Expression {
@@ -1720,7 +1802,6 @@ export class Table extends Expression {
   static readonly argTypes: Record<string, boolean> = { 'this': false, 'alias': false, 'db': false, 'catalog': false, 'laterals': false, 'joins': false, 'pivots': false, 'hints': false, 'system_time': false, 'version': false, 'format': false, 'pattern': false, 'ordinality': false, 'when': false, 'only': false, 'partition': false, 'changes': false, 'rows_from': false, 'sample': false, 'indexed': false };
   get key(): string { return 'table'; }
   static readonly className: string = 'Table';
-  get name(): string { return this.text('this'); }
   get db(): string { return this.text('db'); }
   get catalog(): string { return this.text('catalog'); }
 }
@@ -1729,6 +1810,75 @@ export class SetOperation extends Query {
   static readonly argTypes: Record<string, boolean> = { 'with_': false, 'this': true, 'expression': true, 'distinct': false, 'by_name': false, 'side': false, 'kind': false, 'on': false, 'match': false, 'laterals': false, 'joins': false, 'connect': false, 'pivots': false, 'prewhere': false, 'where': false, 'group': false, 'having': false, 'qualify': false, 'windows': false, 'distribute': false, 'sort': false, 'cluster': false, 'order': false, 'limit': false, 'offset': false, 'locks': false, 'sample': false, 'settings': false, 'format': false, 'options': false };
   override get key(): string { return 'setoperation'; }
   static readonly className: string = 'SetOperation';
+  get kind(): string { return this.text('kind').toUpperCase(); }
+  get side(): string { return this.text('side').toUpperCase(); }
+  override select(...args: (string | Expression | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    const instance = (options.copy === false ? this : this.copy()) as this;
+    const left = instance.args.this;
+    const right = instance.args.expression;
+    if (!(left instanceof Expression) || !(right instanceof Expression)) {
+      return instance;
+    }
+    const leftSelect = left.unnest();
+    const rightSelect = right.unnest();
+    _applyListBuilder(expressions, leftSelect, "expressions", {
+      copy: false,
+      append: options.append ?? true,
+      dialect: options.dialect,
+    });
+    _applyListBuilder(expressions, rightSelect, "expressions", {
+      copy: false,
+      append: options.append ?? true,
+      dialect: options.dialect,
+    });
+    return instance;
+  }
+  override get namedSelects(): string[] {
+    let expression: Query = this;
+    while (expression instanceof SetOperation) {
+      const left = expression.args.this;
+      if (!(left instanceof Expression)) {
+        return [];
+      }
+      const unnested = left.unnest();
+      if (!(unnested instanceof Query)) {
+        return [];
+      }
+      expression = unnested;
+    }
+    return expression.namedSelects;
+  }
+  override get isStar(): boolean {
+    const left = this.args.this;
+    const right = this.args.expression;
+    return left instanceof Expression && right instanceof Expression
+      ? left.isStar || right.isStar
+      : false;
+  }
+  override get selects(): Expression[] {
+    let expression: Query = this;
+    while (expression instanceof SetOperation) {
+      const left = expression.args.this;
+      if (!(left instanceof Expression)) {
+        return [];
+      }
+      const unnested = left.unnest();
+      if (!(unnested instanceof Query)) {
+        return [];
+      }
+      expression = unnested;
+    }
+    return expression.selects;
+  }
+  get left(): Query | undefined {
+    const value = this.args.this;
+    return value instanceof Query ? value : undefined;
+  }
+  get right(): Query | undefined {
+    const value = this.args.expression;
+    return value instanceof Query ? value : undefined;
+  }
 }
 
 export class Union extends SetOperation {
@@ -1750,6 +1900,37 @@ export class Update extends DML {
   static readonly argTypes: Record<string, boolean> = { 'with_': false, 'this': false, 'expressions': false, 'from_': false, 'where': false, 'returning': false, 'order': false, 'limit': false, 'options': false };
   override get key(): string { return 'update'; }
   static readonly className: string = 'Update';
+  table(expression: string | Expression | number, options?: BuilderOptions): this {
+    const expr = typeof expression === 'number' ? `${expression}` : expression;
+    return _applyBuilder(expr, this, 'this', { copy: options?.copy ?? true, into: Table, dialect: options?.dialect }) as this;
+  }
+  where(...args: (string | Expression | null | undefined | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    return _applyConjunctionBuilder(expressions, this, 'where', { copy: options.copy ?? true, into: Where, append: options.append ?? true, dialect: options.dialect }) as this;
+  }
+  from_(expression: string | Expression | number, options?: BuilderOptions): this {
+    const expr = typeof expression === 'number' ? `${expression}` : expression;
+    return _applyBuilder(expr, this, 'from_', { copy: options?.copy ?? true, into: From, prefix: 'FROM', dialect: options?.dialect }) as this;
+  }
+  set_(...expressions: (string | Expression)[]): this {
+    return _applyListBuilder(expressions, this, "expressions", {
+      append: true,
+      copy: true,
+    }) as this;
+  }
+  with_(
+    alias: string | Expression,
+    as_: string | Expression,
+    options?: {
+      recursive?: boolean;
+      materialized?: boolean;
+      append?: boolean;
+      copy?: boolean;
+      dialect?: string;
+    },
+  ): this {
+    return applyCteBuilder(alias, as_, this, options);
+  }
 }
 
 export class Values extends UDTF {
@@ -1761,7 +1942,6 @@ export class Values extends UDTF {
 export class Var extends Expression {
   get key(): string { return 'var'; }
   static readonly className: string = 'Var';
-  get name(): string { return this.text('this'); }
 }
 
 export class Version extends Expression {
@@ -1786,88 +1966,181 @@ export class Select extends Query {
   static readonly argTypes: Record<string, boolean> = { 'with_': false, 'kind': false, 'expressions': false, 'hint': false, 'distinct': false, 'into': false, 'from_': false, 'operation_modifiers': false, 'match': false, 'laterals': false, 'joins': false, 'connect': false, 'pivots': false, 'prewhere': false, 'where': false, 'group': false, 'having': false, 'qualify': false, 'windows': false, 'distribute': false, 'sort': false, 'cluster': false, 'order': false, 'limit': false, 'offset': false, 'locks': false, 'sample': false, 'settings': false, 'format': false, 'options': false };
   override get key(): string { return 'select'; }
   static readonly className: string = 'Select';
-  get selects(): Expression[] {
-    return this.expressions;
+  get selects(): Expression[] { return this.expressions; }
+  groupBy(...args: (string | Expression | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    if (!expressions.length) return (options.copy === false ? this : this.copy()) as this;
+    return _applyChildListBuilder(expressions, this, 'group', { copy: options.copy ?? true, append: options.append ?? true, into: Group, prefix: 'GROUP BY', dialect: options.dialect }) as this;
   }
-  get namedSelects(): string[] {
-    return this.expressions.map(expr => expr.outputName);
+  sortBy(...args: (string | Expression | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    return _applyChildListBuilder(expressions, this, 'sort', { copy: options.copy ?? true, append: options.append ?? true, into: Sort, prefix: 'SORT BY', dialect: options.dialect }) as this;
   }
-  get from_(): Expression | undefined {
-    const from = this.args['from_'];
-    return from instanceof Expression ? from : undefined;
+  clusterBy(...args: (string | Expression | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    return _applyChildListBuilder(expressions, this, 'cluster', { copy: options.copy ?? true, append: options.append ?? true, into: Cluster, prefix: 'CLUSTER BY', dialect: options.dialect }) as this;
+  }
+  lateral(...args: (string | Expression | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    return _applyListBuilder(expressions, this, 'laterals', { copy: options.copy ?? true, append: options.append ?? true, into: Lateral, prefix: 'LATERAL VIEW', dialect: options.dialect }) as this;
+  }
+  having(...args: (string | Expression | null | undefined | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    return _applyConjunctionBuilder(expressions, this, 'having', { copy: options.copy ?? true, into: Having, append: options.append ?? true, dialect: options.dialect }) as this;
+  }
+  window(...args: (string | Expression | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    return _applyListBuilder(expressions, this, 'windows', { copy: options.copy ?? true, append: options.append ?? true, into: Window, dialect: options.dialect }) as this;
+  }
+  qualify(...args: (string | Expression | null | undefined | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    return _applyConjunctionBuilder(expressions, this, 'qualify', { copy: options.copy ?? true, into: Qualify, append: options.append ?? true, dialect: options.dialect }) as this;
+  }
+  override get namedSelects(): string[] {
+    return this.expressions.map((expression) => expression.outputName);
+  }
+  override get isStar(): boolean {
+    return this.expressions.some((expression) => expression.isStar);
   }
   get where_(): Expression | undefined {
-    const where = this.args['where'];
+    const where = this.args.where;
     return where instanceof Expression ? where : undefined;
   }
-  from(expression: string | Expression, copy = true): Select {
-    return _applyBuilder(expression, this, 'from_', { copy, into: From, prefix: 'FROM' }) as Select;
+  from_(expression: string | Expression, options?: BuilderOptions): this {
+    return _applyBuilder(expression, this, "from_", {
+      copy: options?.copy ?? true,
+      into: From,
+      prefix: "FROM",
+      dialect: options?.dialect,
+    }) as this;
   }
-  select(...expressions: (string | Expression)[]): Select {
-    return _applyListBuilder(expressions, this, 'expressions', { copy: true, append: true }) as Select;
+  override select(...args: (string | Expression | BuilderOptions)[]): this {
+    const { expressions, options } = _extractBuilderArgs(args);
+    return _applyListBuilder(expressions, this, "expressions", {
+      copy: options.copy ?? true,
+      append: options.append ?? true,
+      dialect: options.dialect,
+    }) as this;
   }
-  join(expression: string | Expression, options?: { on?: string | Expression; using?: (string | Expression)[]; joinType?: string; copy?: boolean }): Select {
+  join(
+    expression: string | Expression,
+    options?: {
+      on?: string | Expression | (string | Expression)[];
+      using?: string | (string | Expression)[];
+      joinType?: string;
+      joinAlias?: string | Expression;
+      append?: boolean;
+      copy?: boolean;
+      dialect?: string;
+    },
+  ): this {
     const copy = options?.copy ?? true;
+    const dialect = options?.dialect;
     let join: Expression;
-    try { join = maybeParse(expression, { into: Join, prefix: 'JOIN' }); } catch { join = maybeParse(expression); }
-    if (!(join instanceof Join)) { join = new Join({ this: join }); }
+    try {
+      join = maybeParse(expression, { into: Join, prefix: "JOIN", dialect });
+    } catch {
+      join = maybeParse(expression, { dialect });
+    }
+    if (!(join instanceof Join)) {
+      join = new Join({ this: join });
+    }
     if (options?.joinType) {
       const parts = options.joinType.toUpperCase().split(/\s+/);
-      for (const p of parts) {
-        if (p === 'LEFT' || p === 'RIGHT' || p === 'FULL') join.set('side', p);
-        else if (p === 'INNER' || p === 'OUTER' || p === 'CROSS' || p === 'SEMI' || p === 'ANTI') join.set('kind', p);
-        else if (p === 'NATURAL') join.set('method', p);
+      for (const part of parts) {
+        if (part === "LEFT" || part === "RIGHT" || part === "FULL") {
+          join.set("side", part);
+        } else if (
+          part === "INNER" ||
+          part === "OUTER" ||
+          part === "CROSS" ||
+          part === "SEMI" ||
+          part === "ANTI"
+        ) {
+          join.set("kind", part);
+        } else if (part === "NATURAL") {
+          join.set("method", part);
+        }
       }
     }
     if (options?.on) {
-      join.set('on', maybeParse(options.on));
+      const onValues = globalThis.Array.isArray(options.on) ? options.on : [options.on];
+      join = _applyConjunctionBuilder(onValues, join, "on", {
+        append: true,
+        copy: false,
+        dialect,
+      });
     }
     if (options?.using) {
-      join.set('using', options.using.map(u => maybeParse(u)));
+      const usingValues = globalThis.Array.isArray(options.using) ? options.using : [options.using];
+      const usingExpressions = usingValues.map((value) =>
+        typeof value === "string" ? new Identifier({ this: value }) : value,
+      );
+      join = _applyListBuilder(usingExpressions, join, "using", {
+        append: true,
+        copy: false,
+      });
     }
-    return _applyListBuilder([join], this, 'joins', { copy, append: true }) as Select;
+    if (options?.joinAlias) {
+      const joinValue = join.args.this;
+      const alias = typeof options.joinAlias === "string"
+        ? new Identifier({ this: options.joinAlias })
+        : options.joinAlias;
+      if (joinValue instanceof Expression && alias instanceof Expression) {
+        joinValue.set("alias", new TableAlias({ this: alias }));
+      }
+    }
+    const joinValue = join.args.this;
+    if (joinValue instanceof Select) {
+      joinValue.replace(joinValue.subquery());
+    }
+    return _applyListBuilder([join], this, "joins", {
+      copy,
+      append: options?.append ?? true,
+    }) as this;
   }
-  groupBy(...expressions: (string | Expression)[]): Select {
-    return _applyChildListBuilder(expressions, this, 'group', { copy: true, into: Group, prefix: 'GROUP BY' }) as Select;
+  distinct(...args: (string | Expression | { distinct?: boolean })[]): this {
+    const instance = this.copy() as this;
+    let distinctValue = true;
+    const onValues: (string | Expression)[] = [];
+    for (const arg of args) {
+      if (
+        typeof arg === "object" &&
+        arg !== null &&
+        !(arg instanceof Expression) &&
+        "distinct" in arg
+      ) {
+        distinctValue = arg.distinct ?? true;
+      } else {
+        onValues.push(arg as string | Expression);
+      }
+    }
+    const on = onValues.length > 0
+      ? new Tuple({ expressions: onValues.map((value) => maybeParse(value)) })
+      : undefined;
+    instance.set("distinct", distinctValue ? new Distinct({ on }) : undefined);
+    return instance;
   }
-  having(...expressions: (string | Expression)[]): Select {
-    return _applyConjunctionBuilder(expressions, this, 'having', { copy: true, into: Having, append: true }) as Select;
+  ctas(
+    table: string | Expression,
+    options?: { dialect?: string; copy?: boolean },
+  ): Create {
+    const instance = options?.copy !== false ? this.copy() : this;
+    const tableExpression = maybeParse(table, {
+      into: Table,
+      dialect: options?.dialect,
+    });
+    return new Create({ this: tableExpression, kind: "TABLE", expression: instance });
   }
-  distinct(value = true): Select {
-    const inst = this.copy() as Select;
-    inst.set('distinct', value ? new Distinct({}) : undefined);
-    return inst;
+  lock(update = true, copy = true): this {
+    const instance = copy ? (this.copy() as this) : this;
+    instance.set("locks", [new Lock({ update })]);
+    return instance;
   }
-  qualify(...expressions: (string | Expression)[]): Select {
-    return _applyConjunctionBuilder(expressions, this, 'qualify', { copy: true, into: Qualify, append: true }) as Select;
-  }
-  sortBy(...expressions: (string | Expression)[]): Select {
-    return _applyChildListBuilder(expressions, this, 'sort', { copy: true, into: Sort, prefix: 'SORT BY' }) as Select;
-  }
-  clusterBy(...expressions: (string | Expression)[]): Select {
-    return _applyChildListBuilder(expressions, this, 'cluster', { copy: true, into: Cluster, prefix: 'CLUSTER BY' }) as Select;
-  }
-  lateral(...expressions: (string | Expression)[]): Select {
-    return _applyListBuilder(expressions, this, 'laterals', { copy: true, append: true, into: Lateral, prefix: 'LATERAL VIEW' }) as Select;
-  }
-  window_(...expressions: (string | Expression)[]): Select {
-    return _applyListBuilder(expressions, this, 'windows', { copy: true, append: true, into: Window, prefix: 'WINDOW' }) as Select;
-  }
-  ctas(table: string | Expression, options?: { dialect?: string; copy?: boolean }): Create {
-    const inst = options?.copy !== false ? this.copy() : this;
-    const tableExpr = maybeParse(table, { into: Table, dialect: options?.dialect });
-    return new Create({ this: tableExpr, kind: 'TABLE', expression: inst });
-  }
-  lock(update = true, copy = true): Select {
-    const inst = copy ? this.copy() as Select : this;
-    inst.set('locks', [new Lock({ update })]);
-    return inst;
-  }
-  hint(...hints: (string | Expression)[]): Select {
-    const inst = this.copy() as Select;
-    const parsed = hints.map(h => maybeParse(h));
-    inst.set('hint', new Hint({ expressions: parsed }));
-    return inst;
+  hint(...hints: (string | Expression)[]): this {
+    const instance = this.copy() as this;
+    instance.set("hint", new Hint({ expressions: hints.map((hint) => maybeParse(hint)) }));
+    return instance;
   }
 }
 
@@ -1876,18 +2149,6 @@ export class Subquery extends DerivedTable {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'alias': false, 'with_': false, 'match': false, 'laterals': false, 'joins': false, 'connect': false, 'pivots': false, 'prewhere': false, 'where': false, 'group': false, 'having': false, 'qualify': false, 'windows': false, 'distribute': false, 'sort': false, 'cluster': false, 'order': false, 'limit': false, 'offset': false, 'locks': false, 'sample': false, 'settings': false, 'format': false, 'options': false };
   override get key(): string { return 'subquery'; }
   static readonly className: string = 'Subquery';
-  limit(expression: string | Expression, copy = true): this {
-    return _applyBuilder(expression, this, 'limit', { copy, into: Limit, prefix: 'LIMIT' }) as this;
-  }
-  offset(expression: string | Expression, copy = true): this {
-    return _applyBuilder(expression, this, 'offset', { copy, into: Offset, prefix: 'OFFSET' }) as this;
-  }
-  orderBy(...expressions: (string | Expression)[]): this {
-    return _applyChildListBuilder(expressions, this, 'order', { copy: true, into: Order, prefix: 'ORDER BY' }) as this;
-  }
-  where(...expressions: (string | Expression)[]): this {
-    return _applyConjunctionBuilder(expressions, this, 'where', { copy: true, into: Where, append: true }) as this;
-  }
 }
 
 export class TableSample extends Expression {
@@ -1906,6 +2167,7 @@ export class Pivot extends Expression {
   static readonly argTypes: Record<string, boolean> = { 'this': false, 'alias': false, 'expressions': false, 'fields': false, 'unpivot': false, 'using': false, 'group': false, 'columns': false, 'include_nulls': false, 'default_on_null': false, 'into': false, 'with_': false };
   get key(): string { return 'pivot'; }
   static readonly className: string = 'Pivot';
+  get unpivot(): boolean { return !!this.args['unpivot']; }
 }
 
 export class UnpivotColumns extends Expression {
@@ -1940,7 +2202,9 @@ export class Star extends Expression {
   static readonly argTypes: Record<string, boolean> = { 'except_': false, 'replace': false, 'rename': false };
   get key(): string { return 'star'; }
   static readonly className: string = 'Star';
-  override get isStar(): boolean { return true; }
+  override get isStar(): boolean {
+    return true;
+  }
 }
 
 export class Parameter extends Condition {
@@ -1969,9 +2233,15 @@ export class Null extends Condition {
 export class Boolean extends Condition {
   override get key(): string { return 'boolean'; }
   static readonly className: string = 'Boolean';
-  get value(): boolean { return !!this.args['this']; }
-  static true_(): Boolean { return new Boolean({ this: true }); }
-  static false_(): Boolean { return new Boolean({ this: false }); }
+  get value(): boolean {
+    return !!this.args.this;
+  }
+  static true_(): Boolean {
+    return new Boolean({ this: true });
+  }
+  static false_(): Boolean {
+    return new Boolean({ this: false });
+  }
 }
 
 export class DataTypeParam extends Expression {
@@ -2142,12 +2412,12 @@ export class Binary extends Condition {
   override get key(): string { return 'binary'; }
   static readonly className: string = 'Binary';
   get left(): Expression | undefined {
-    const val = this.args['this'];
-    return val instanceof Expression ? val : undefined;
+    const value = this.args.this;
+    return value instanceof Expression ? value : undefined;
   }
   get right(): Expression | undefined {
-    const val = this.args['expression'];
-    return val instanceof Expression ? val : undefined;
+    const value = this.args.expression;
+    return value instanceof Expression ? value : undefined;
   }
 }
 
@@ -2404,6 +2674,7 @@ export class Aliases extends Expression {
   static readonly argTypes: Record<string, boolean> = { 'this': true, 'expressions': true };
   get key(): string { return 'aliases'; }
   static readonly className: string = 'Aliases';
+  get aliases(): Expression[] { return this.expressions; }
 }
 
 export class AtIndex extends Expression {
@@ -2504,10 +2775,12 @@ export class Func extends Condition {
   override get key(): string { return 'func'; }
   static readonly className: string = 'Func';
   static readonly sqlNames: readonly string[] | undefined = undefined;
-  get name(): string {
-    const ctor = this.constructor as typeof Func;
+  override get name(): string {
+    const ctor = this.constructor as typeof Func & { readonly sqlNames?: readonly string[] };
     const first = ctor.sqlNames?.[0];
-    if (first) return first;
+    if (first) {
+      return first;
+    }
     return camelToSnakeCase(ctor.className);
   }
 }
@@ -2877,7 +3150,13 @@ export class Anonymous extends Func {
   static readonly isVarLenArgs = true;
   override get key(): string { return 'anonymous'; }
   static readonly className: string = 'Anonymous';
-  override get name(): string { return this.text('this'); }
+  override get name(): string {
+    const thisValue = this.args.this;
+    if (typeof thisValue === "string") {
+      return thisValue;
+    }
+    return thisValue instanceof Expression ? thisValue.name : "";
+  }
 }
 
 export class AnonymousAggFunc extends AggFunc {
@@ -3154,8 +3433,8 @@ export class ArrayContains extends Binary {
   override get key(): string { return 'arraycontains'; }
   static readonly className: string = 'ArrayContains';
   override get name(): string {
-    const ctor = this.constructor as typeof ArrayContains;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof ArrayContains & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -3167,8 +3446,8 @@ export class ArrayContainsAll extends Binary {
   override get key(): string { return 'arraycontainsall'; }
   static readonly className: string = 'ArrayContainsAll';
   override get name(): string {
-    const ctor = this.constructor as typeof ArrayContainsAll;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof ArrayContainsAll & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -3248,8 +3527,8 @@ export class ArrayOverlaps extends Binary {
   override get key(): string { return 'arrayoverlaps'; }
   static readonly className: string = 'ArrayOverlaps';
   override get name(): string {
-    const ctor = this.constructor as typeof ArrayOverlaps;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof ArrayOverlaps & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -3346,6 +3625,16 @@ export class Case extends Func {
   static readonly argTypes: Record<string, boolean> = { 'this': false, 'ifs': true, 'default': false };
   override get key(): string { return 'case'; }
   static readonly className: string = 'Case';
+  when(condition: string | Expression, then: string | Expression, copy = true): this {
+    const instance = copy ? (this.copy() as this) : this;
+    instance.append("ifs", new If({ this: maybeParse(condition), true: maybeParse(then) }));
+    return instance;
+  }
+  else_(condition: string | Expression, copy = true): this {
+    const instance = copy ? (this.copy() as this) : this;
+    instance.set("default", maybeParse(condition));
+    return instance;
+  }
 }
 
 export class Cast extends Func {
@@ -3414,8 +3703,8 @@ export class Collate extends Binary {
   override get key(): string { return 'collate'; }
   static readonly className: string = 'Collate';
   override get name(): string {
-    const ctor = this.constructor as typeof Collate;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof Collate & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4298,8 +4587,8 @@ export class And extends Connector {
   override get key(): string { return 'and'; }
   static readonly className: string = 'And';
   override get name(): string {
-    const ctor = this.constructor as typeof And;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof And & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4310,8 +4599,8 @@ export class Or extends Connector {
   override get key(): string { return 'or'; }
   static readonly className: string = 'Or';
   override get name(): string {
-    const ctor = this.constructor as typeof Or;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof Or & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4324,8 +4613,8 @@ export class Xor extends Connector {
   override get key(): string { return 'xor'; }
   static readonly className: string = 'Xor';
   override get name(): string {
-    const ctor = this.constructor as typeof Xor;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof Xor & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4610,8 +4899,8 @@ export class JSONBContains extends Binary {
   override get key(): string { return 'jsonbcontains'; }
   static readonly className: string = 'JSONBContains';
   override get name(): string {
-    const ctor = this.constructor as typeof JSONBContains;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof JSONBContains & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4622,8 +4911,8 @@ export class JSONBContainsAnyTopKeys extends Binary {
   override get key(): string { return 'jsonbcontainsanytopkeys'; }
   static readonly className: string = 'JSONBContainsAnyTopKeys';
   override get name(): string {
-    const ctor = this.constructor as typeof JSONBContainsAnyTopKeys;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof JSONBContainsAnyTopKeys & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4634,8 +4923,8 @@ export class JSONBContainsAllTopKeys extends Binary {
   override get key(): string { return 'jsonbcontainsalltopkeys'; }
   static readonly className: string = 'JSONBContainsAllTopKeys';
   override get name(): string {
-    const ctor = this.constructor as typeof JSONBContainsAllTopKeys;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof JSONBContainsAllTopKeys & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4653,8 +4942,8 @@ export class JSONBDeleteAtPath extends Binary {
   override get key(): string { return 'jsonbdeleteatpath'; }
   static readonly className: string = 'JSONBDeleteAtPath';
   override get name(): string {
-    const ctor = this.constructor as typeof JSONBDeleteAtPath;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof JSONBDeleteAtPath & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4668,8 +4957,8 @@ export class JSONExtract extends Binary {
   override get key(): string { return 'jsonextract'; }
   static readonly className: string = 'JSONExtract';
   override get name(): string {
-    const ctor = this.constructor as typeof JSONExtract;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof JSONExtract & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4696,8 +4985,8 @@ export class JSONExtractScalar extends Binary {
   override get key(): string { return 'jsonextractscalar'; }
   static readonly className: string = 'JSONExtractScalar';
   override get name(): string {
-    const ctor = this.constructor as typeof JSONExtractScalar;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof JSONExtractScalar & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4709,8 +4998,8 @@ export class JSONBExtract extends Binary {
   override get key(): string { return 'jsonbextract'; }
   static readonly className: string = 'JSONBExtract';
   override get name(): string {
-    const ctor = this.constructor as typeof JSONBExtract;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof JSONBExtract & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4723,8 +5012,8 @@ export class JSONBExtractScalar extends Binary {
   override get key(): string { return 'jsonbextractscalar'; }
   static readonly className: string = 'JSONBExtractScalar';
   override get name(): string {
-    const ctor = this.constructor as typeof JSONBExtractScalar;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof JSONBExtractScalar & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -4752,8 +5041,8 @@ export class JSONArrayContains extends Binary {
   override get key(): string { return 'jsonarraycontains'; }
   static readonly className: string = 'JSONArrayContains';
   override get name(): string {
-    const ctor = this.constructor as typeof JSONArrayContains;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof JSONArrayContains & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -5142,8 +5431,8 @@ export class Pow extends Binary {
   override get key(): string { return 'pow'; }
   static readonly className: string = 'Pow';
   override get name(): string {
-    const ctor = this.constructor as typeof Pow;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof Pow & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -5279,8 +5568,8 @@ export class RegexpLike extends Binary {
   override get key(): string { return 'regexplike'; }
   static readonly className: string = 'RegexpLike';
   override get name(): string {
-    const ctor = this.constructor as typeof RegexpLike;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof RegexpLike & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -5292,8 +5581,8 @@ export class RegexpILike extends Binary {
   override get key(): string { return 'regexpilike'; }
   static readonly className: string = 'RegexpILike';
   override get name(): string {
-    const ctor = this.constructor as typeof RegexpILike;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof RegexpILike & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -5305,8 +5594,8 @@ export class RegexpFullMatch extends Binary {
   override get key(): string { return 'regexpfullmatch'; }
   static readonly className: string = 'RegexpFullMatch';
   override get name(): string {
-    const ctor = this.constructor as typeof RegexpFullMatch;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof RegexpFullMatch & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -5863,8 +6152,8 @@ export class Corr extends Binary {
   override get key(): string { return 'corr'; }
   static readonly className: string = 'Corr';
   override get name(): string {
-    const ctor = this.constructor as typeof Corr;
-    const first = (ctor as any).sqlNames?.[0];
+    const ctor = this.constructor as typeof Corr & { readonly sqlNames?: readonly string[] };
+    const first = ctor.sqlNames?.[0];
     if (first) return first;
     return camelToSnakeCase(ctor.className);
   }
@@ -6020,6 +6309,96 @@ export class TableColumn extends Expression {
 export class Variadic extends Expression {
   get key(): string { return 'variadic'; }
   static readonly className: string = 'Variadic';
+}
+
+type SetOperationBuilderArg = string | Expression | { distinct?: boolean };
+type CteBuilderOptions = {
+  recursive?: boolean;
+  materialized?: boolean;
+  append?: boolean;
+  copy?: boolean;
+  dialect?: string;
+  scalar?: boolean;
+};
+
+function extractSetOperationArgs(
+  args: SetOperationBuilderArg[],
+): { expressions: (string | Expression)[]; distinct: boolean } {
+  let distinct = true;
+  const expressions: (string | Expression)[] = [];
+  for (const arg of args) {
+    if (
+      typeof arg === "object" &&
+      arg !== null &&
+      !(arg instanceof Expression) &&
+      "distinct" in arg
+    ) {
+      distinct = arg.distinct ?? true;
+    } else {
+      expressions.push(arg as string | Expression);
+    }
+  }
+  return { expressions, distinct };
+}
+
+function applySetOperation(
+  expressions: (string | Expression)[],
+  setConstructor: new (args?: Args) => Expression,
+  options?: {
+    distinct?: boolean;
+    dialect?: string;
+    copy?: boolean;
+  },
+): Expression {
+  const parsed = expressions.map((expression) =>
+    maybeParse(expression, {
+      dialect: options?.dialect,
+      copy: options?.copy,
+    }),
+  );
+  let result = parsed[0];
+  if (!result) {
+    throw new Error("Set operations require at least one expression");
+  }
+  for (const expression of parsed.slice(1)) {
+    result = new setConstructor({
+      this: result,
+      expression,
+      distinct: options?.distinct ?? true,
+    });
+  }
+  return result;
+}
+
+function applyCteBuilder<T extends Query | Update | Insert>(
+  alias: string | Expression,
+  as_: string | Expression,
+  instance: T,
+  options?: CteBuilderOptions,
+): T {
+  const aliasExpression = maybeParse(alias, {
+    dialect: options?.dialect,
+    into: TableAlias,
+  });
+  let asExpression = maybeParse(as_, {
+    dialect: options?.dialect,
+    copy: options?.copy,
+  });
+  if (options?.scalar && !(asExpression instanceof Subquery)) {
+    asExpression = new Subquery({ this: asExpression });
+  }
+  const cte = new CTE({
+    this: asExpression,
+    alias: aliasExpression,
+    materialized: options?.materialized,
+    scalar: options?.scalar,
+  });
+  return _applyChildListBuilder([cte], instance, "with_", {
+    append: options?.append ?? true,
+    copy: options?.copy ?? true,
+    into: With,
+    properties: options?.recursive ? { recursive: options.recursive } : {},
+  }) as T;
 }
 
 type NamedExpressionClass = ExpressionClass & { readonly className: string };
@@ -7003,3 +7382,149 @@ export const MULTI_INHERITANCE_MAP: Record<string, readonly string[]> = {
   'TimeUnit': ['DateAdd', 'DateBin', 'DateDiff', 'DateSub', 'DatetimeAdd', 'DatetimeDiff', 'DatetimeSub', 'DatetimeTrunc', 'LastDay', 'TimeAdd', 'TimeDiff', 'TimeSlice', 'TimeSub', 'TimeTrunc', 'TimestampAdd', 'TimestampDiff', 'TimestampSub', 'TimestampTrunc', 'TsOrDsAdd', 'TsOrDsDiff'],
   'UDTF': ['Explode', 'ExplodeOuter', 'Generator', 'Posexplode', 'PosexplodeOuter', 'Unnest'],
 };
+
+export const DATA_TYPE_TYPES = {
+  ARRAY: 'ARRAY',
+  AGGREGATEFUNCTION: 'AGGREGATEFUNCTION',
+  SIMPLEAGGREGATEFUNCTION: 'SIMPLEAGGREGATEFUNCTION',
+  BIGDECIMAL: 'BIGDECIMAL',
+  BIGINT: 'BIGINT',
+  BIGNUM: 'BIGNUM',
+  BIGSERIAL: 'BIGSERIAL',
+  BINARY: 'BINARY',
+  BIT: 'BIT',
+  BLOB: 'BLOB',
+  BOOLEAN: 'BOOLEAN',
+  BPCHAR: 'BPCHAR',
+  CHAR: 'CHAR',
+  DATE: 'DATE',
+  DATE32: 'DATE32',
+  DATEMULTIRANGE: 'DATEMULTIRANGE',
+  DATERANGE: 'DATERANGE',
+  DATETIME: 'DATETIME',
+  DATETIME2: 'DATETIME2',
+  DATETIME64: 'DATETIME64',
+  DECIMAL: 'DECIMAL',
+  DECIMAL32: 'DECIMAL32',
+  DECIMAL64: 'DECIMAL64',
+  DECIMAL128: 'DECIMAL128',
+  DECIMAL256: 'DECIMAL256',
+  DECFLOAT: 'DECFLOAT',
+  DOUBLE: 'DOUBLE',
+  DYNAMIC: 'DYNAMIC',
+  ENUM: 'ENUM',
+  ENUM8: 'ENUM8',
+  ENUM16: 'ENUM16',
+  FILE: 'FILE',
+  FIXEDSTRING: 'FIXEDSTRING',
+  FLOAT: 'FLOAT',
+  GEOGRAPHY: 'GEOGRAPHY',
+  GEOGRAPHYPOINT: 'GEOGRAPHYPOINT',
+  GEOMETRY: 'GEOMETRY',
+  POINT: 'POINT',
+  RING: 'RING',
+  LINESTRING: 'LINESTRING',
+  MULTILINESTRING: 'MULTILINESTRING',
+  POLYGON: 'POLYGON',
+  MULTIPOLYGON: 'MULTIPOLYGON',
+  HLLSKETCH: 'HLLSKETCH',
+  HSTORE: 'HSTORE',
+  IMAGE: 'IMAGE',
+  INET: 'INET',
+  INT: 'INT',
+  INT128: 'INT128',
+  INT256: 'INT256',
+  INT4MULTIRANGE: 'INT4MULTIRANGE',
+  INT4RANGE: 'INT4RANGE',
+  INT8MULTIRANGE: 'INT8MULTIRANGE',
+  INT8RANGE: 'INT8RANGE',
+  INTERVAL: 'INTERVAL',
+  IPADDRESS: 'IPADDRESS',
+  IPPREFIX: 'IPPREFIX',
+  IPV4: 'IPV4',
+  IPV6: 'IPV6',
+  JSON: 'JSON',
+  JSONB: 'JSONB',
+  LIST: 'LIST',
+  LONGBLOB: 'LONGBLOB',
+  LONGTEXT: 'LONGTEXT',
+  LOWCARDINALITY: 'LOWCARDINALITY',
+  MAP: 'MAP',
+  MEDIUMBLOB: 'MEDIUMBLOB',
+  MEDIUMINT: 'MEDIUMINT',
+  MEDIUMTEXT: 'MEDIUMTEXT',
+  MONEY: 'MONEY',
+  NAME: 'NAME',
+  NCHAR: 'NCHAR',
+  NESTED: 'NESTED',
+  NOTHING: 'NOTHING',
+  NULL: 'NULL',
+  NUMMULTIRANGE: 'NUMMULTIRANGE',
+  NUMRANGE: 'NUMRANGE',
+  NVARCHAR: 'NVARCHAR',
+  OBJECT: 'OBJECT',
+  RANGE: 'RANGE',
+  ROWVERSION: 'ROWVERSION',
+  SERIAL: 'SERIAL',
+  SET: 'SET',
+  SMALLDATETIME: 'SMALLDATETIME',
+  SMALLINT: 'SMALLINT',
+  SMALLMONEY: 'SMALLMONEY',
+  SMALLSERIAL: 'SMALLSERIAL',
+  STRUCT: 'STRUCT',
+  SUPER: 'SUPER',
+  TEXT: 'TEXT',
+  TINYBLOB: 'TINYBLOB',
+  TINYTEXT: 'TINYTEXT',
+  TIME: 'TIME',
+  TIMETZ: 'TIMETZ',
+  TIME_NS: 'TIME_NS',
+  TIMESTAMP: 'TIMESTAMP',
+  TIMESTAMPNTZ: 'TIMESTAMPNTZ',
+  TIMESTAMPLTZ: 'TIMESTAMPLTZ',
+  TIMESTAMPTZ: 'TIMESTAMPTZ',
+  TIMESTAMP_S: 'TIMESTAMP_S',
+  TIMESTAMP_MS: 'TIMESTAMP_MS',
+  TIMESTAMP_NS: 'TIMESTAMP_NS',
+  TINYINT: 'TINYINT',
+  TSMULTIRANGE: 'TSMULTIRANGE',
+  TSRANGE: 'TSRANGE',
+  TSTZMULTIRANGE: 'TSTZMULTIRANGE',
+  TSTZRANGE: 'TSTZRANGE',
+  UBIGINT: 'UBIGINT',
+  UINT: 'UINT',
+  UINT128: 'UINT128',
+  UINT256: 'UINT256',
+  UMEDIUMINT: 'UMEDIUMINT',
+  UDECIMAL: 'UDECIMAL',
+  UDOUBLE: 'UDOUBLE',
+  UNION: 'UNION',
+  UNKNOWN: 'UNKNOWN',
+  USERDEFINED: 'USERDEFINED',
+  USMALLINT: 'USMALLINT',
+  UTINYINT: 'UTINYINT',
+  UUID: 'UUID',
+  VARBINARY: 'VARBINARY',
+  VARCHAR: 'VARCHAR',
+  VARIANT: 'VARIANT',
+  VECTOR: 'VECTOR',
+  XML: 'XML',
+  YEAR: 'YEAR',
+  TDIGEST: 'TDIGEST',
+} as const;
+
+export type DataTypeType = typeof DATA_TYPE_TYPES[keyof typeof DATA_TYPE_TYPES];
+
+// eslint-disable-next-line @typescript-eslint/no-shadow
+const NativeSet = globalThis.Set;
+export const STRUCT_TYPES: ReadonlySet<string> = new NativeSet(['FILE', 'NESTED', 'OBJECT', 'STRUCT', 'UNION']);
+export const ARRAY_TYPES: ReadonlySet<string> = new NativeSet(['ARRAY', 'LIST']);
+export const NESTED_TYPES: ReadonlySet<string> = new NativeSet(['FILE', 'NESTED', 'OBJECT', 'STRUCT', 'UNION', 'ARRAY', 'LIST', 'MAP']);
+export const TEXT_TYPES: ReadonlySet<string> = new NativeSet(['CHAR', 'NCHAR', 'NVARCHAR', 'TEXT', 'VARCHAR', 'NAME']);
+export const SIGNED_INTEGER_TYPES: ReadonlySet<string> = new NativeSet(['BIGINT', 'INT', 'INT128', 'INT256', 'MEDIUMINT', 'SMALLINT', 'TINYINT']);
+export const UNSIGNED_INTEGER_TYPES: ReadonlySet<string> = new NativeSet(['UBIGINT', 'UINT', 'UINT128', 'UINT256', 'UMEDIUMINT', 'USMALLINT', 'UTINYINT']);
+export const INTEGER_TYPES: ReadonlySet<string> = new NativeSet(['BIGINT', 'INT', 'INT128', 'INT256', 'MEDIUMINT', 'SMALLINT', 'TINYINT', 'UBIGINT', 'UINT', 'UINT128', 'UINT256', 'UMEDIUMINT', 'USMALLINT', 'UTINYINT', 'BIT']);
+export const FLOAT_TYPES: ReadonlySet<string> = new NativeSet(['DOUBLE', 'FLOAT']);
+export const REAL_TYPES: ReadonlySet<string> = new NativeSet(['DOUBLE', 'FLOAT', 'BIGDECIMAL', 'DECIMAL', 'DECIMAL32', 'DECIMAL64', 'DECIMAL128', 'DECIMAL256', 'DECFLOAT', 'MONEY', 'SMALLMONEY', 'UDECIMAL', 'UDOUBLE']);
+export const NUMERIC_TYPES: ReadonlySet<string> = new NativeSet(['BIGINT', 'INT', 'INT128', 'INT256', 'MEDIUMINT', 'SMALLINT', 'TINYINT', 'UBIGINT', 'UINT', 'UINT128', 'UINT256', 'UMEDIUMINT', 'USMALLINT', 'UTINYINT', 'BIT', 'DOUBLE', 'FLOAT', 'BIGDECIMAL', 'DECIMAL', 'DECIMAL32', 'DECIMAL64', 'DECIMAL128', 'DECIMAL256', 'DECFLOAT', 'MONEY', 'SMALLMONEY', 'UDECIMAL', 'UDOUBLE']);
+export const TEMPORAL_TYPES: ReadonlySet<string> = new NativeSet(['DATE', 'DATE32', 'DATETIME', 'DATETIME2', 'DATETIME64', 'SMALLDATETIME', 'TIME', 'TIMESTAMP', 'TIMESTAMPNTZ', 'TIMESTAMPLTZ', 'TIMESTAMPTZ', 'TIMESTAMP_MS', 'TIMESTAMP_NS', 'TIMESTAMP_S', 'TIMETZ']);

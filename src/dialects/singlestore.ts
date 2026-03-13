@@ -44,7 +44,7 @@ export class SingleStoreGenerator extends MySQLGenerator {
       exp.UnixToStr,
       (gen: Generator, e: exp.Expression) => {
         const expr = e as exp.UnixToStr
-        const thisExpr = gen.sql(expr.args.this as exp.Expression)
+        const thisExpr = gen.sql(expr.args.this)
         const format = gen.formatTimeStr(expr)
         if (format) {
           return `FROM_UNIXTIME(${thisExpr}, ${format})`
