@@ -45,7 +45,6 @@ ignore = [
   "D",
   "FIX",
   "G004",
-  "ISC001",
   "PLC1901",
   "PLR0911",
   "PLR0915",
@@ -58,8 +57,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"test_*.py" = ["A002", "PLR2004", "S", "FBT"]
-"conftest.py" = ["S"]
+"{test_*.py,conftest.py}" = ["PLR2004", "S", "FBT"]
 
 [tool.ruff.lint.isort]
 force-single-line = true

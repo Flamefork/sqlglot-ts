@@ -1,0 +1,134 @@
+{
+  "TestAthena": {
+    "passed": 2,
+    "failed": 6
+  },
+  "TestBigQuery": {
+    "passed": 28,
+    "failed": 28
+  },
+  "TestBuild": {
+    "passed": 1,
+    "failed": 0
+  },
+  "TestClickhouse": {
+    "passed": 12,
+    "failed": 13
+  },
+  "TestDatabricks": {
+    "passed": 7,
+    "failed": 6
+  },
+  "TestDoris": {
+    "passed": 7,
+    "failed": 4
+  },
+  "TestDremio": {
+    "passed": 6,
+    "failed": 15
+  },
+  "TestDrill": {
+    "passed": 1,
+    "failed": 1
+  },
+  "TestDruid": {
+    "passed": 0,
+    "failed": 1
+  },
+  "TestDune": {
+    "passed": 1,
+    "failed": 0
+  },
+  "TestExasol": {
+    "passed": 4,
+    "failed": 8
+  },
+  "TestExpressions": {
+    "passed": 11,
+    "failed": 55
+  },
+  "TestFabric": {
+    "passed": 0,
+    "failed": 6
+  },
+  "TestHive": {
+    "passed": 10,
+    "failed": 3
+  },
+  "TestMaterialize": {
+    "passed": 0,
+    "failed": 1
+  },
+  "TestMySQL": {
+    "passed": 16,
+    "failed": 29
+  },
+  "TestOracle": {
+    "passed": 6,
+    "failed": 14
+  },
+  "TestPRQL": {
+    "passed": 0,
+    "failed": 1
+  },
+  "TestPipeSyntax": {
+    "passed": 0,
+    "failed": 10
+  },
+  "TestPostgres": {
+    "passed": 15,
+    "failed": 9
+  },
+  "TestPresto": {
+    "passed": 13,
+    "failed": 7
+  },
+  "TestRedshift": {
+    "passed": 8,
+    "failed": 8
+  },
+  "TestRisingWave": {
+    "passed": 1,
+    "failed": 1
+  },
+  "TestSQLite": {
+    "passed": 5,
+    "failed": 4
+  },
+  "TestSingleStore": {
+    "passed": 9,
+    "failed": 17
+  },
+  "TestSnowflake": {
+    "passed": 29,
+    "failed": 57
+  },
+  "TestSolr": {
+    "passed": 0,
+    "failed": 1
+  },
+  "TestSpark": {
+    "passed": 12,
+    "failed": 5
+  },
+  "TestStarrocks": {
+    "passed": 2,
+    "failed": 7
+  },
+  "TestTSQL": {
+    "passed": 31,
+    "failed": 20
+  },
+  "TestTableau": {
+    "passed": 1,
+    "failed": 0
+  },
+  "TestTeradata": {
+    "passed": 6,
+    "failed": 9
+  },
+  "TestTrino": {
+    "passed": 1,
+    "failed": 5
+  }
+}
