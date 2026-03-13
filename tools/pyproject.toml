@@ -25,6 +25,17 @@ testpaths = [
   "../sqlglot/tests/test_time.py",
   "../sqlglot/tests/test_errors.py",
   "../sqlglot/tests/test_helper.py",
+  # Excluded (unsupported domains):
+  #   test_transforms.py — transform functions not ported to TS
+  #   test_jsonpath.py — JSONPath parser not ported to TS
+  #   test_optimizer.py — optimizer not in scope
+  #   test_executor.py — executor not in scope
+  #   test_lineage.py — requires optimizer/scope
+  #   test_schema.py — requires optimizer/scope
+  #   test_diff.py — AST diff not ported
+  #   test_docs.py — validates Python docstrings
+  #   test_dialect_entry_points.py — validates Python packaging
+  #   test_dialect_imports.py — validates Python packaging
 ]
 addopts = "-v --tb=short -p conftest --import-mode=importlib -k 'not test_lazy_load'"
 

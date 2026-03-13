@@ -39,6 +39,10 @@
     "passed": 1,
     "failed": 0
   },
+  "TestErrors": {
+    "passed": 13,
+    "failed": 0
+  },
   "TestExasol": {
     "passed": 4,
     "failed": 8
@@ -50,6 +54,14 @@
   "TestFabric": {
     "passed": 0,
     "failed": 6
+  },
+  "TestGenerator": {
+    "passed": 3,
+    "failed": 3
+  },
+  "TestHelper": {
+    "passed": 3,
+    "failed": 0
   },
   "TestHive": {
     "passed": 10,
@@ -70,6 +82,10 @@
   "TestPRQL": {
     "passed": 0,
     "failed": 1
+  },
+  "TestParser": {
+    "passed": 13,
+    "failed": 50
   },
   "TestPipeSyntax": {
     "passed": 0,
@@ -93,6 +109,10 @@
   },
   "TestSQLite": {
     "passed": 5,
+    "failed": 4
+  },
+  "TestSerde": {
+    "passed": 1,
     "failed": 4
   },
   "TestSingleStore": {
@@ -126,6 +146,18 @@
   "TestTeradata": {
     "passed": 6,
     "failed": 9
+  },
+  "TestTime": {
+    "passed": 3,
+    "failed": 0
+  },
+  "TestTokens": {
+    "passed": 4,
+    "failed": 5
+  },
+  "TestTranspile": {
+    "passed": 7,
+    "failed": 19
   },
   "TestTrino": {
     "passed": 1,
